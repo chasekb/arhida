@@ -1,0 +1,28 @@
+version: "3"
+name: "prd-homeless007"
+
+services:
+  server:
+    container_name: "server-homeless007"
+    build:
+      context: .
+    environment:
+      - POSTGRES_USER_FILE=/run/secrets/postgres-u
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres-p
+      - MONGO_INITDB_ROOT_USERNAME_FILE=/run/secrets/mongodb-u
+      - MONGO_INITDB_ROOT_PASSWORD_FILE=/run/secrets/mongodb-p
+    networks:
+      - prd-homeless000_prdnet
+
+secrets:
+  postgres-u:
+    file: /db/postgres-u.txt
+  postgres-p:
+    file: /db/postgres-p.txt
+  mongodb-u:
+    file: db/mongodb-u.txt
+  mongodb-p:
+    file: db/mongodb-p.txt
+networks:
+  prd-homeless000_prdnet:
+    external: True
