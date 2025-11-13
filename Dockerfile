@@ -1,18 +1,35 @@
-FROM python:3
+FROM python:3.11-slim
 
-WORKDIR ./
+# Set working directory
+WORKDIR /app
 
-# install requirements
+# Install system dependencies for PostgreSQL
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
 COPY requirements.txt ./
-RUN pip install --upgrade pip
-# RUN pip install --no-cache-dir -r requirements.txt
-RUN sed 's/==.*$//' requirements.txt | xargs pip install
 
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
 COPY . .
 
-CMD [ "python", "./sluckman42.py" ]
+# Create directory for database credentials
+RUN mkdir -p /db
 
-# for debugging only
-#ENTRYPOINT ["tail"]
-#CMD ["-f","/dev/null"]
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
+# Default command - can be overridden
+CMD [ "python", "./arhida.py" ]
+
+# Alternative commands for different use cases
+# For debugging:
+# ENTRYPOINT ["tail"]
+# CMD ["-f", "/dev/null"]
