@@ -10,19 +10,19 @@ services:
       dockerfile: Dockerfile
     environment:
       # Database (using external PostgreSQL or local)
-      - POSTGRES_HOST=${POSTGRES_HOST:-db-local}
+      - POSTGRES_HOST=${POSTGRES_HOST:-db-postgres}
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
       - POSTGRES_SCHEMA=${POSTGRES_SCHEMA}
       - POSTGRES_TABLE=${POSTGRES_TABLE}
-      
+
       # Docker secrets (alternative)
-      - DOCKER_POSTGRES_HOST=db-local
+      - DOCKER_POSTGRES_HOST=db-postgres
       - DOCKER_POSTGRES_USER_FILE=/run/secrets/postgres-u
       - DOCKER_POSTGRES_PASSWORD_FILE=/run/secrets/postgres-p
-      
+
       # Application settings
       - ARXIV_RATE_LIMIT_DELAY=${ARXIV_RATE_LIMIT_DELAY:-3}
       - ARXIV_BATCH_SIZE=${ARXIV_BATCH_SIZE:-2000}
@@ -32,50 +32,19 @@ services:
       - ./logs:/app/logs
       - ./config:/app/config:ro
     networks:
-      - arhida-net
+      - db_prdnet
     secrets:
       - postgres-u
       - postgres-p
     restart: unless-stopped
-    
+
     # Health check
     healthcheck:
-      test: ["CMD", "./arhida-cpp", "--help"]
+      test: [ "CMD", "./arhida-cpp", "--help" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-
-  # Optional: Local PostgreSQL for testing
-  db-local:
-    image: postgres:16-alpine
-    container_name: arhida-postgres
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - arhida-net
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Optional: Adminer for database management
-  adminer:
-    image: adminer:latest
-    container_name: arhida-adminer
-    ports:
-      - "8080:8080"
-    networks:
-      - arhida-net
-    depends_on:
-      - db-local
-    restart: unless-stopped
 
 secrets:
   postgres-u:
@@ -84,8 +53,5 @@ secrets:
     file: db/postgres-p.txt
 
 networks:
-  arhida-net:
-    driver: bridge
-
-volumes:
-  postgres-data:
+  db_prdnet:
+    external: true
