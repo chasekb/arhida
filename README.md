@@ -1,145 +1,148 @@
-# arXiv Academic Paper Metadata Harvester
+# arXiv Academic Paper Metadata Harvester (C++)
 
-This project harvests academic paper metadata from arXiv.org's OAI-PMH interface, complying with their API rate limits and terms of use. The harvested data has been migrated from MongoDB to PostgreSQL for better performance and scalability.
+A high-performance C++ implementation of the arXiv Academic Paper Metadata Harvester. This application harvests academic paper metadata from arXiv.org's OAI-PMH interface and stores it in PostgreSQL.
 
-## What Data is Retrieved
+## Features
 
-The application retrieves comprehensive metadata for academic papers from arXiv, including:
+- **OAI-PMH Client**: Harvests metadata from arXiv.org's OAI-PMH interface
+- **PostgreSQL Storage**: Stores data in PostgreSQL with JSONB fields
+- **Rate Limiting**: Implements 3-second delays to comply with arXiv.org's terms of use
+- **Batch Processing**: Processes records in batches of up to 2,000 records
+- **Backfill Support**: Fill in missing dates from the database
+- **CLI Interface**: Command-line interface with multiple modes
 
-- **Paper Titles**: Full titles of research papers
-- **Authors**: Complete author information and affiliations
-- **Abstracts**: Paper descriptions and summaries
-- **Publication Dates**: When papers were published or updated
-- **Subject Categories**: arXiv classification categories (physics, math, computer science, etc.)
-- **Unique Identifiers**: arXiv IDs and DOI references
-- **Metadata Timestamps**: When records were last updated
+## Requirements
 
-## Rate Limiting Requirements
+- C++20 compatible compiler (GCC 13+)
+- CMake 3.16+
+- PostgreSQL libpq
+- libcurl
+- libxml2
 
-According to arxiv.org's Terms of Use:
-- **Maximum 1 request every 3 seconds**
-- **Single connection at a time**
-- **Maximum 30,000 results per query**
-- **Results retrieved in slices of up to 2,000 at a time**
+## Building
+
+### Local Build
+
+```bash
+# Create build directory
+mkdir build && cd build
+
+# Configure
+cmake .. -DCMAKE_BUILD_TYPE=Release
+
+# Build
+make -j$(nproc)
+```
+
+### Docker Build
+
+```bash
+# Build the Docker image
+docker build -t arhida-cpp:latest .
+
+# Or use docker-compose
+docker-compose up --build
+```
 
 ## Configuration
 
-The application is configured through environment variables defined in the `.env` file. Copy `.env.example` to `.env` and update the values for your environment. The following variables control the application's behavior:
+Configure the application through environment variables:
 
-### Database Configuration
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_HOST` | `localhost` | PostgreSQL host (local development) |
-| `POSTGRES_DB` | `your_database_name` | PostgreSQL database name |
-| `POSTGRES_USER` | `your_username` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | `your_password` | PostgreSQL password |
+| `POSTGRES_HOST` | `localhost` | PostgreSQL host |
+| `POSTGRES_DB` | - | Database name |
+| `POSTGRES_USER` | - | Database user |
+| `POSTGRES_PASSWORD` | - | Database password |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
-| `POSTGRES_SCHEMA` | `your_schema` | PostgreSQL schema name |
-| `POSTGRES_TABLE` | `your_table` | PostgreSQL table name |
-
-### Docker Environment Configuration
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DOCKER_POSTGRES_HOST` | `db-postgres` | PostgreSQL host (Docker environment) |
-| `DOCKER_POSTGRES_USER_FILE` | `db/postgres-u.txt` | Path to PostgreSQL username file |
-| `DOCKER_POSTGRES_PASSWORD_FILE` | `db/postgres-p.txt` | Path to PostgreSQL password file |
-
-### arXiv API Configuration
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ARXIV_RATE_LIMIT_DELAY` | `3` | Delay between requests in seconds |
-| `ARXIV_BATCH_SIZE` | `2000` | Maximum records per batch |
-| `ARXIV_MAX_RETRIES` | `3` | Maximum retries for failed requests |
-| `ARXIV_RETRY_AFTER` | `5` | Retry delay after failed requests |
-
-### Backfill Configuration
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKFILL_CHUNK_SIZE` | `7` | Number of days to process in each backfill chunk |
-| `BACKFILL_START_DATE` | `2007-01-01` | Default start date for backfill operations |
-
-## Implementation Details
-
-### Rate Limiting
-- 3-second delay before the first request
-- 3-second delay between different set specifications
-- 3-second delay between batches when processing large datasets
-
-### Batch Processing
-- Records are processed in batches of up to 2,000 records
-- Each batch is processed with proper error handling
-- Progress is logged every 100 records within a batch
-
-### Error Handling
-- Retry logic for HTTP 503 (Service Unavailable) and 429 (Rate Limit Exceeded)
-- Graceful handling of connection errors
-- Comprehensive logging for monitoring and debugging
-
-### Database
-- Records are stored in PostgreSQL in the configured schema (default: `your_schema`)
-- Uses the configured database on the appropriate network
-- Connects to the configured PostgreSQL service
-- JSONB fields for complex metadata structures with GIN indexes
-- Upsert operations prevent duplicate records
-
-### Backfill Functionality
-- Automatically detects missing dates in the database
-- Backfills missing data for any date range
-- Processes data in configurable chunks (default: 7 days)
-- Supports both recent harvest and historical backfill
-- Command-line interface for flexible operation
-
-### Logging
-- Structured logging with timestamps
-- Progress tracking for each set specification
-- Summary statistics upon completion
+| `POSTGRES_SCHEMA` | `arxiv` | Schema name |
+| `POSTGRES_TABLE` | `metadata` | Table name |
+| `ARXIV_RATE_LIMIT_DELAY` | `3` | Delay between requests (seconds) |
+| `ARXIV_BATCH_SIZE` | `2000` | Records per batch |
+| `ARXIV_MAX_RETRIES` | `3` | Maximum retries |
+| `ARXIV_RETRY_AFTER` | `5` | Retry delay (seconds) |
 
 ## Usage
 
-The script supports multiple modes of operation with command-line arguments:
+### Command-Line Options
 
-### Recent Harvest (Default)
-Harvest the last 2 days of data:
 ```bash
-python arhida.py --mode recent
-```
+# Recent harvest (last 2 days)
+./arhida-cpp --mode recent
 
-### Backfill Missing Dates
-Backfill all missing dates from 2007 to present:
-```bash
-python arhida.py --mode backfill
-```
+# Backfill missing dates
+./arhida-cpp --mode backfill
 
-Backfill specific date range:
-```bash
-python arhida.py --mode backfill --start-date 2007-01-01 --end-date 2009-12-31
-```
+# Both recent and backfill
+./arhida-cpp --mode both --start-date 2020-01-01
 
-### Both Recent and Backfill
-```bash
-python arhida.py --mode both --start-date 2020-01-01
-```
-
-### Custom Set Specifications
-```bash
-python arhida.py --mode backfill --set-specs physics math cs
+# Custom set specifications
+./arhida-cpp --mode backfill --set-specs physics math cs
 ```
 
 ### Docker Usage
-```bash
-# Recent harvest
-docker-compose run server python arhida.py --mode recent
-
-# Backfill with custom dates
-docker-compose run server python arhida.py --mode backfill --start-date 2020-01-01 --end-date 2020-12-31
-```
-
-### Environment Variables
-For custom configuration, set environment variables:
 
 ```bash
-export ARXIV_RATE_LIMIT_DELAY=3
-export ARXIV_BATCH_SIZE=2000
-export BACKFILL_CHUNK_SIZE=7
-python arhida.py --mode backfill
+# Run with docker-compose
+docker-compose run app ./arhida-cpp --mode recent
 ```
+
+## Project Structure
+
+```
+arhida/
+├── CMakeLists.txt           # Build configuration
+├── Dockerfile              # Docker build
+├── docker-compose.yaml     # Container orchestration
+├── include/               # Header files
+│   ├── config/
+│   ├── db/
+│   ├── harvester/
+│   ├── oai/
+│   └── utils/
+├── src/                   # Source files
+│   ├── main.cpp
+│   ├── config/
+│   ├── db/
+│   ├── harvester/
+│   ├── oai/
+│   └── utils/
+└── legacy_python/         # Python reference implementation
+```
+
+## Database Schema
+
+The application creates the following schema in PostgreSQL:
+
+```sql
+CREATE TABLE IF NOT EXISTS arxiv.metadata (
+    id SERIAL PRIMARY KEY,
+    header_datestamp TIMESTAMP,
+    header_identifier VARCHAR(255) UNIQUE NOT NULL,
+    header_setSpecs JSONB,
+    metadata_creator JSONB,
+    metadata_date JSONB,
+    metadata_description TEXT,
+    metadata_identifier JSONB,
+    metadata_subject JSONB,
+    metadata_title JSONB,
+    metadata_type VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## Rate Limiting
+
+This application complies with arXiv.org's terms of use:
+- Maximum 1 request every 3 seconds
+- Single connection at a time
+- Maximum 30,000 results per query
+
+## License
+
+MIT License
+
+## Author
+
+Bernard Chase

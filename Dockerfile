@@ -1,35 +1,74 @@
-FROM python:3.11-slim
+# arhida-cpp Dockerfile
+# Multi-stage build for C++ application
 
-# Set working directory
-WORKDIR /app
+# Build arguments
+ARG BUILD_DATE
+ARG VERSION=main
+ARG REVISION=unknown
 
-# Install system dependencies for PostgreSQL
+# Stage 1: Builder
+FROM gcc:13 AS builder
+
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
+    cmake \
+    make \
+    pkg-config \
     libpq-dev \
-    gcc \
+    libcurl4-openssl-dev \
+    libxml2-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt ./
+WORKDIR /build
 
-# Install Python dependencies
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
+# Copy source code
 COPY . .
 
+# Create build directory
+RUN mkdir -p build && cd build
+
+# Configure with CMake
+RUN cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DBUILD_TESTS=ON
+
+# Build
+RUN make -j$(nproc)
+RUN make install
+
+# Stage 2: Final runtime image
+FROM debian:bookworm-slim
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    libcurl4 \
+    libxml2 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/bash appuser
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /usr/local/bin/arhida-cpp .
+
+# Copy configuration and headers
+COPY --from=builder /app/config/ ./config/
+COPY --from=builder /app/include/ ./include/
+
 # Create directory for database credentials
-RUN mkdir -p /db
+RUN mkdir -p /db /app/logs && chown -R appuser:appuser /app
 
-# Set environment variables
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
+# Switch to non-root user
+USER appuser
 
-# Default command - can be overridden
-CMD [ "python", "./arhida.py" ]
+# Labels
+LABEL org.opencontainers.image.title="arXiv Harvester (C++)"
+LABEL org.opencontainers.image.version=$VERSION
+LABEL org.opencontainers.image.revision=$REVISION
+LABEL org.opencontainers.image.created=$BUILD_DATE
 
-# Alternative commands for different use cases
-# For debugging:
-# ENTRYPOINT ["tail"]
-# CMD ["-f", "/dev/null"]
+ENTRYPOINT ["./arhida-cpp"]

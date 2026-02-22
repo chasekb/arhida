@@ -1,3 +1,45 @@
-.venv
-db/*
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# Compiled binaries
+*.o
+*.a
+*.so
+*.dylib
+arhida-cpp
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# Environment
 .env
+.env.local
+
+# Database secrets (keep in repo if needed, but typically should be excluded)
+db/postgres-u.txt
+db/postgres-p.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test output
+Testing/
+CTestTestfile.cmake
