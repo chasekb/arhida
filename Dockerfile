@@ -7,10 +7,11 @@ ARG VERSION=main
 ARG REVISION=unknown
 
 # Stage 1: Builder
-FROM gcc:13 AS builder
+FROM debian:bookworm-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
+    build-essential \
     cmake \
     make \
     pkg-config \
