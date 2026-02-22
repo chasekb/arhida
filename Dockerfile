@@ -35,8 +35,8 @@ RUN cmake -B build -S . \
     -DBUILD_TESTS=ON
 
 # Build
-RUN make -j$(nproc)
-RUN make install
+RUN cmake --build build -j$(nproc)
+RUN cmake --install build
 
 # Stage 2: Final runtime image
 FROM debian:bookworm-slim
