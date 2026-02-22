@@ -41,6 +41,10 @@ RUN make install
 # Stage 2: Final runtime image
 FROM debian:bookworm-slim
 
+ARG BUILD_DATE
+ARG VERSION
+ARG REVISION
+
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
     libpq5 \
