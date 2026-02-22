@@ -42,7 +42,8 @@ void Config::load() {
           value = value.substr(1, value.size() - 2);
         }
 
-        setenv(key.c_str(), value.c_str(), 1);
+        // 0 means do not overwrite existing environment variables
+        setenv(key.c_str(), value.c_str(), 0);
       }
     }
     env_file.close();
