@@ -55,9 +55,14 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /usr/local/bin/arhida-cpp .
 
-# Copy configuration from source (if needed at runtime)
+# Copy source files (headers, config) for potential runtime needs
 COPY --from=builder /build/include/ ./include/
 COPY --from=builder /build/src/config/ ./config/
+COPY --from=builder /build/CMakeLists.txt ./CMakeLists.txt
+COPY --from=builder /build/src/ ./src/
+
+# Copy .env.example as template (users should rename and configure)
+COPY .env.example .env
 
 # Create directory for database credentials
 RUN mkdir -p /db /app/logs && chown -R appuser:appuser /app

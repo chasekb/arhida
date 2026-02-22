@@ -1,0 +1,32 @@
+# Environment files (may contain secrets)
+.env
+
+# Exception: .env.example is safe to include (template)
+!.env.example
+.env.*
+*.pem
+*.key
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+*.o
+*.so
+*.a
+
+# Documentation
+docs/
+README.md
