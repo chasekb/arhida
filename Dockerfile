@@ -26,10 +26,10 @@ WORKDIR /build
 COPY . .
 
 # Create build directory
-RUN mkdir -p build && cd build
+RUN mkdir -p build
 
 # Configure with CMake
-RUN cmake .. \
+RUN cmake -B build -S . \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/local \
     -DBUILD_TESTS=ON
@@ -55,9 +55,9 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /usr/local/bin/arhida-cpp .
 
-# Copy configuration and headers
-COPY --from=builder /app/config/ ./config/
-COPY --from=builder /app/include/ ./include/
+# Copy configuration from source (if needed at runtime)
+COPY --from=builder /build/include/ ./include/
+COPY --from=builder /build/src/config/ ./config/
 
 # Create directory for database credentials
 RUN mkdir -p /db /app/logs && chown -R appuser:appuser /app

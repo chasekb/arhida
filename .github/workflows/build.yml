@@ -62,15 +62,7 @@ jobs:
             REVISION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      
-      - name: Build multi-platform image
-        if: github.event_name != 'pull_request'
-        run: |
-          # Build for multiple platforms
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} \
-            --push .
+          platforms: linux/amd64,linux/arm64
 
   test:
     runs-on: ubuntu-latest

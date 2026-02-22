@@ -45,7 +45,6 @@ set(SOURCES
     src/main.cpp
     src/config/Config.cpp
     src/oai/OaiClient.cpp
-    src/oai/Record.cpp
     src/db/Database.cpp
     src/db/QueryBuilder.cpp
     src/harvester/Harvester.cpp
