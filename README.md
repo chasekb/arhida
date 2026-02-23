@@ -40,8 +40,9 @@ make -j$(nproc)
 # Build the Docker image
 docker build -t arhida-cpp:latest .
 
-# Or use docker-compose
-docker-compose up --build
+# Or use docker-compose with the build configuration file
+docker-compose -f docker-compose.yaml -f docker-compose.build.yaml build
+docker-compose -f docker-compose.yaml -f docker-compose.build.yaml up
 ```
 
 ## Configuration
@@ -83,7 +84,11 @@ Configure the application through environment variables:
 ### Docker Usage
 
 ```bash
-# Run with docker-compose
+# Pull the pre-built image and start the application
+docker-compose pull
+docker-compose up -d
+
+# Run a specific command using docker-compose
 docker-compose run app ./arhida-cpp --mode recent
 ```
 
@@ -94,6 +99,7 @@ arhida/
 ├── CMakeLists.txt           # Build configuration
 ├── Dockerfile              # Docker build
 ├── docker-compose.yaml     # Container orchestration
+├── docker-compose.build.yaml # Local build configuration overlay
 ├── include/               # Header files
 │   ├── config/
 │   ├── db/
@@ -135,6 +141,7 @@ CREATE TABLE IF NOT EXISTS arxiv.metadata (
 ## Rate Limiting
 
 This application complies with arXiv.org's terms of use:
+
 - Maximum 1 request every 3 seconds
 - Single connection at a time
 - Maximum 30,000 results per query

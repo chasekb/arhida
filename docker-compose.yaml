@@ -5,9 +5,6 @@ services:
   app:
     image: ghcr.io/chasekb/arhida-cpp:latest
     container_name: arhida-cpp
-    build:
-      context: .
-      dockerfile: Dockerfile
     environment:
       # Database (using external PostgreSQL or local)
       - POSTGRES_HOST=${POSTGRES_HOST:-db-postgres}
