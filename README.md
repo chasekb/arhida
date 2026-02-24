@@ -38,7 +38,7 @@ make -j$(nproc)
 
 ```bash
 # Build the Docker image
-docker build -t arhida-cpp:latest .
+docker build -t arhida:latest .
 
 # Or use docker-compose with the build configuration file
 docker-compose -f docker-compose.yaml -f docker-compose.build.yaml build

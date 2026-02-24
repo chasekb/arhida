@@ -3,7 +3,7 @@ name: arhida-cpp
 
 services:
   app:
-    image: ghcr.io/chasekb/arhida-cpp:latest
+    image: ghcr.io/chasekb/arhida:latest
     container_name: arhida-cpp
     environment:
       # Database (using external PostgreSQL or local)
