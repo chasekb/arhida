@@ -16,7 +16,8 @@ using json = nlohmann::json;
 
 Harvester::Harvester(Database &db) : db_(db), oai_client_(nullptr) {
   Config &config = Config::instance();
-  oai_client_ = new OaiClient("http://export.arxiv.org/oai2");
+  // Use the correct arXiv OAI-PMH endpoint
+  oai_client_ = new OaiClient("https://oaipmh.arxiv.org/oai");
   oai_client_->setRateLimitDelay(config.getRateLimitDelay());
   oai_client_->setMaxRetries(config.getMaxRetries());
 }
@@ -40,13 +41,22 @@ void Harvester::ensureTableExists() {
 int Harvester::harvestRecent(const std::vector<std::string> &set_specs) {
   Config &config = Config::instance();
 
-  // Calculate dates (last 2 days)
+  // Calculate dates (last 2 days) - ensure we don't use future dates
   auto now = std::chrono::system_clock::now();
   auto two_days_ago = now - std::chrono::hours(48);
   auto one_day_ago = now - std::chrono::hours(24);
 
+  // Get current date to avoid future dates
+  std::time_t current_time = std::chrono::system_clock::to_time_t(now);
+  std::tm *current_tm = std::localtime(&current_time);
+  std::time_t current_midnight = std::mktime(current_tm);
+  
+  // Ensure we don't go beyond current date
   std::time_t from_time = std::chrono::system_clock::to_time_t(two_days_ago);
   std::time_t until_time = std::chrono::system_clock::to_time_t(one_day_ago);
+  
+  if (from_time > current_midnight) from_time = current_midnight;
+  if (until_time > current_midnight) until_time = current_midnight;
 
   char from_date[11];
   char until_date[11];
@@ -116,8 +126,12 @@ int Harvester::harvestBackfill(const std::string &start_date,
   if (end_date.empty()) {
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm *tm_ptr = std::localtime(&time_t);
+    // Set to yesterday to avoid potential issues with current day
+    tm_ptr->tm_mday -= 1;
+    mktime(tm_ptr); // Normalize
     char date_str[11];
-    strftime(date_str, sizeof(date_str), "%Y-%m-%d", std::localtime(&time_t));
+    strftime(date_str, sizeof(date_str), "%Y-%m-%d", tm_ptr);
     end = date_str;
   } else {
     end = end_date;

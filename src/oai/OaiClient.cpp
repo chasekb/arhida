@@ -20,6 +20,10 @@ OaiClient::OaiClient(const std::string &base_url)
     : base_url_(base_url), curl_(nullptr), rate_limit_delay_(3),
       max_retries_(3) {
   curl_ = curl_easy_init();
+  
+  // Set up CURL to follow redirects properly
+  curl_easy_setopt(curl_, CURLOPT_FOLLOWLOCATION, 1L);
+  curl_easy_setopt(curl_, CURLOPT_MAXREDIRS, 5L);
 }
 
 OaiClient::~OaiClient() {
@@ -137,32 +141,42 @@ std::vector<Record> OaiClient::parseXmlResponse(const std::string &xml) {
     return records;
   }
 
+  // Check if the XML has a default namespace
+  bool has_namespace = false;
+  if (root->ns && root->ns->href) {
+    has_namespace = true;
+    spdlog::debug("XML has default namespace: {}", (const char*)root->ns->href);
+  }
+
   // Find all record nodes
   for (xmlNodePtr node = root->children; node; node = node->next) {
-    if (xmlStrcmp(node->name, (const xmlChar *)"record") == 0) {
+    // Handle namespace-aware parsing
+    if ((has_namespace && xmlStrcmp(node->name, (const xmlChar *)"record") == 0) ||
+        (!has_namespace && xmlStrcmp(node->name, (const xmlChar *)"record") == 0)) {
       Record record;
 
       // Parse header
       for (xmlNodePtr child = node->children; child; child = child->next) {
-        if (xmlStrcmp(child->name, (const xmlChar *)"header") == 0) {
+        if ((has_namespace && xmlStrcmp(child->name, (const xmlChar *)"header") == 0) ||
+            (!has_namespace && xmlStrcmp(child->name, (const xmlChar *)"header") == 0)) {
           for (xmlNodePtr header_child = child->children; header_child;
                header_child = header_child->next) {
-            if (xmlStrcmp(header_child->name, (const xmlChar *)"identifier") ==
-                0) {
+            if ((has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"identifier") == 0) ||
+                (!has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"identifier") == 0)) {
               xmlChar *content = xmlNodeGetContent(header_child);
               if (content) {
                 record.header_identifier = (const char *)content;
                 xmlFree(content);
               }
-            } else if (xmlStrcmp(header_child->name,
-                                 (const xmlChar *)"datestamp") == 0) {
+            } else if ((has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"datestamp") == 0) ||
+                       (!has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"datestamp") == 0)) {
               xmlChar *content = xmlNodeGetContent(header_child);
               if (content) {
                 record.header_datestamp = (const char *)content;
                 xmlFree(content);
               }
-            } else if (xmlStrcmp(header_child->name,
-                                 (const xmlChar *)"setSpec") == 0) {
+            } else if ((has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"setSpec") == 0) ||
+                       (!has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"setSpec") == 0)) {
               xmlChar *content = xmlNodeGetContent(header_child);
               if (content) {
                 record.header_setSpecs.push_back((const char *)content);
@@ -172,7 +186,8 @@ std::vector<Record> OaiClient::parseXmlResponse(const std::string &xml) {
           }
         }
         // Parse metadata (Dublin Core)
-        else if (xmlStrcmp(child->name, (const xmlChar *)"metadata") == 0) {
+        else if ((has_namespace && xmlStrcmp(child->name, (const xmlChar *)"metadata") == 0) ||
+                 (!has_namespace && xmlStrcmp(child->name, (const xmlChar *)"metadata") == 0)) {
           for (xmlNodePtr dc = child->children; dc; dc = dc->next) {
             // Dublin Core elements
             for (xmlNodePtr dc_child = dc->children; dc_child;
