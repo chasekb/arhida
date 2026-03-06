@@ -149,16 +149,25 @@ std::vector<Record> OaiClient::parseXmlResponse(const std::string &xml) {
                header_child = header_child->next) {
             if (xmlStrcmp(header_child->name, (const xmlChar *)"identifier") ==
                 0) {
-              record.header_identifier =
-                  (const char *)xmlNodeGetContent(header_child);
+              xmlChar *content = xmlNodeGetContent(header_child);
+              if (content) {
+                record.header_identifier = (const char *)content;
+                xmlFree(content);
+              }
             } else if (xmlStrcmp(header_child->name,
                                  (const xmlChar *)"datestamp") == 0) {
-              record.header_datestamp =
-                  (const char *)xmlNodeGetContent(header_child);
+              xmlChar *content = xmlNodeGetContent(header_child);
+              if (content) {
+                record.header_datestamp = (const char *)content;
+                xmlFree(content);
+              }
             } else if (xmlStrcmp(header_child->name,
                                  (const xmlChar *)"setSpec") == 0) {
-              record.header_setSpecs.push_back(
-                  (const char *)xmlNodeGetContent(header_child));
+              xmlChar *content = xmlNodeGetContent(header_child);
+              if (content) {
+                record.header_setSpecs.push_back((const char *)content);
+                xmlFree(content);
+              }
             }
           }
         }
@@ -169,22 +178,26 @@ std::vector<Record> OaiClient::parseXmlResponse(const std::string &xml) {
             for (xmlNodePtr dc_child = dc->children; dc_child;
                  dc_child = dc_child->next) {
               std::string name = (const char *)dc_child->name;
-              std::string content = (const char *)xmlNodeGetContent(dc_child);
+              xmlChar *content = xmlNodeGetContent(dc_child);
+              if (content) {
+                std::string content_str = (const char *)content;
+                xmlFree(content);
 
-              if (name == "creator") {
-                record.metadata_creator.push_back(content);
-              } else if (name == "date") {
-                record.metadata_date.push_back(content);
-              } else if (name == "description") {
-                record.metadata_description = content;
-              } else if (name == "identifier") {
-                record.metadata_identifier.push_back(content);
-              } else if (name == "subject") {
-                record.metadata_subject.push_back(content);
-              } else if (name == "title") {
-                record.metadata_title.push_back(content);
-              } else if (name == "type") {
-                record.metadata_type = content;
+                if (name == "creator") {
+                  record.metadata_creator.push_back(content_str);
+                } else if (name == "date") {
+                  record.metadata_date.push_back(content_str);
+                } else if (name == "description") {
+                  record.metadata_description = content_str;
+                } else if (name == "identifier") {
+                  record.metadata_identifier.push_back(content_str);
+                } else if (name == "subject") {
+                  record.metadata_subject.push_back(content_str);
+                } else if (name == "title") {
+                  record.metadata_title.push_back(content_str);
+                } else if (name == "type") {
+                  record.metadata_type = content_str;
+                }
               }
             }
           }
