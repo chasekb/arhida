@@ -129,6 +129,11 @@ std::vector<Record> OaiClient::listRecords(const std::string &metadata_prefix,
 std::vector<Record> OaiClient::parseXmlResponse(const std::string &xml) {
   std::vector<Record> records;
 
+  auto isElementNamed = [](xmlNodePtr node, const char *name) {
+    return node && node->type == XML_ELEMENT_NODE &&
+           xmlStrcmp(node->name, reinterpret_cast<const xmlChar *>(name)) == 0;
+  };
+
   xmlDocPtr doc = xmlReadMemory(xml.c_str(), xml.size(), "noname.xml", NULL, 0);
   if (!doc) {
     spdlog::error("Failed to parse XML response");
@@ -141,42 +146,48 @@ std::vector<Record> OaiClient::parseXmlResponse(const std::string &xml) {
     return records;
   }
 
-  // Check if the XML has a default namespace
-  bool has_namespace = false;
   if (root->ns && root->ns->href) {
-    has_namespace = true;
-    spdlog::debug("XML has default namespace: {}", (const char*)root->ns->href);
+    spdlog::debug("XML default namespace: {}", (const char *)root->ns->href);
   }
 
-  // Find all record nodes
+  // OAI-PMH structure is OAI-PMH -> ListRecords -> record
+  xmlNodePtr list_records = nullptr;
   for (xmlNodePtr node = root->children; node; node = node->next) {
-    // Handle namespace-aware parsing
-    if ((has_namespace && xmlStrcmp(node->name, (const xmlChar *)"record") == 0) ||
-        (!has_namespace && xmlStrcmp(node->name, (const xmlChar *)"record") == 0)) {
+    if (isElementNamed(node, "ListRecords")) {
+      list_records = node;
+      break;
+    }
+  }
+
+  if (!list_records) {
+    spdlog::warn("No <ListRecords> element found in OAI-PMH response");
+    xmlFreeDoc(doc);
+    return records;
+  }
+
+  // Find all record nodes under <ListRecords>
+  for (xmlNodePtr node = list_records->children; node; node = node->next) {
+    if (isElementNamed(node, "record")) {
       Record record;
 
       // Parse header
       for (xmlNodePtr child = node->children; child; child = child->next) {
-        if ((has_namespace && xmlStrcmp(child->name, (const xmlChar *)"header") == 0) ||
-            (!has_namespace && xmlStrcmp(child->name, (const xmlChar *)"header") == 0)) {
+        if (isElementNamed(child, "header")) {
           for (xmlNodePtr header_child = child->children; header_child;
                header_child = header_child->next) {
-            if ((has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"identifier") == 0) ||
-                (!has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"identifier") == 0)) {
+            if (isElementNamed(header_child, "identifier")) {
               xmlChar *content = xmlNodeGetContent(header_child);
               if (content) {
                 record.header_identifier = (const char *)content;
                 xmlFree(content);
               }
-            } else if ((has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"datestamp") == 0) ||
-                       (!has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"datestamp") == 0)) {
+            } else if (isElementNamed(header_child, "datestamp")) {
               xmlChar *content = xmlNodeGetContent(header_child);
               if (content) {
                 record.header_datestamp = (const char *)content;
                 xmlFree(content);
               }
-            } else if ((has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"setSpec") == 0) ||
-                       (!has_namespace && xmlStrcmp(header_child->name, (const xmlChar *)"setSpec") == 0)) {
+            } else if (isElementNamed(header_child, "setSpec")) {
               xmlChar *content = xmlNodeGetContent(header_child);
               if (content) {
                 record.header_setSpecs.push_back((const char *)content);
@@ -186,12 +197,18 @@ std::vector<Record> OaiClient::parseXmlResponse(const std::string &xml) {
           }
         }
         // Parse metadata (Dublin Core)
-        else if ((has_namespace && xmlStrcmp(child->name, (const xmlChar *)"metadata") == 0) ||
-                 (!has_namespace && xmlStrcmp(child->name, (const xmlChar *)"metadata") == 0)) {
+        else if (isElementNamed(child, "metadata")) {
           for (xmlNodePtr dc = child->children; dc; dc = dc->next) {
+            if (dc->type != XML_ELEMENT_NODE) {
+              continue;
+            }
             // Dublin Core elements
             for (xmlNodePtr dc_child = dc->children; dc_child;
                  dc_child = dc_child->next) {
+              if (dc_child->type != XML_ELEMENT_NODE) {
+                continue;
+              }
+
               std::string name = (const char *)dc_child->name;
               xmlChar *content = xmlNodeGetContent(dc_child);
               if (content) {
