@@ -44,6 +44,7 @@ include_directories(include)
 set(SOURCES
     src/main.cpp
     src/config/Config.cpp
+    src/embedding/EmbeddingClient.cpp
     src/embedding/EmbeddingTextBuilder.cpp
     src/oai/OaiClient.cpp
     src/db/Database.cpp

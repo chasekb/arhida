@@ -1271,7 +1271,7 @@ This section breaks the migration into checkable implementation phases.
 
 ## Phase 11: Application-Side Embedding Client
 
-- [ ] Implement `EmbeddingClient` in the main C++ app
+- [x] Implement `EmbeddingClient` in the main C++ app
 - [ ] Implement `/health` check on startup
 - [ ] Implement batched `/embed` calls
 - [ ] Implement retry logic for transient failures
