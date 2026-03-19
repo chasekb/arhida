@@ -269,6 +269,15 @@ void Harvester::insertRecords(const std::vector<Record> &records,
           throw std::runtime_error(
               "Embeddings service returned no vectors for harvested record");
         }
+
+        db_.upsertRecord(record, vectors.front());
+        processed++;
+
+        if (processed % 100 == 0) {
+          spdlog::info("Processed {} records in current batch for {}", processed,
+                       set_spec);
+        }
+        continue;
       }
 
       // Convert vectors to JSON

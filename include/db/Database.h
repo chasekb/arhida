@@ -26,6 +26,7 @@ public:
     void createSchema(const std::string& schema_name) override;
     void createTable(const std::string& schema_name, const std::string& table_name) override;
     void createIndexes(const std::string& schema_name, const std::string& table_name) override;
+    void upsertRecord(const Record& record, const std::vector<float>& embedding) override;
     
     // Query operations
     void execute(const std::string& query);

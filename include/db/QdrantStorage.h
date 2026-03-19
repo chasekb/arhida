@@ -22,6 +22,7 @@ public:
     void createSchema(const std::string& schema_name) override;
     void createTable(const std::string& schema_name, const std::string& table_name) override;
     void createIndexes(const std::string& schema_name, const std::string& table_name) override;
+    void upsertRecord(const Record& record, const std::vector<float>& embedding) override;
 
     std::string getCollectionName() const;
 
@@ -33,6 +34,7 @@ private:
     bool collectionExists() const;
     void ensureCollection();
     void validateCollectionConfiguration() const;
+    std::uint64_t makePointId(const std::string& identifier) const;
 
     bool connected_;
     std::string base_url_;

@@ -7,9 +7,12 @@
 #include "db/Database.h"
 #include "config/Config.h"
 #include "utils/Logger.h"
+#include <nlohmann/json.hpp>
 #include <cstring>
 #include <fstream>
 #include <sstream>
+
+using json = nlohmann::json;
 
 Database::Database() : conn_(nullptr), connected_(false) {}
 
@@ -126,6 +129,47 @@ void Database::createIndexes(const std::string &schema_name,
     execute(idx);
   }
   spdlog::info("Created indexes for table: {}.{}", schema_name, table_name);
+}
+
+void Database::upsertRecord(const Record &record,
+                            const std::vector<float> &embedding) {
+  Config &config = Config::instance();
+  std::string schema = config.getPostgresSchema();
+  std::string table = config.getPostgresTable();
+
+  json header_setSpecs = json::array();
+  for (const auto &s : record.header_setSpecs) {
+    header_setSpecs.push_back(s);
+  }
+
+  json metadata_creator = json::array();
+  for (const auto &c : record.metadata_creator) {
+    metadata_creator.push_back(c);
+  }
+
+  json metadata_date = json::array();
+  for (const auto &d : record.metadata_date) {
+    metadata_date.push_back(d);
+  }
+
+  json metadata_identifier = json::array();
+  for (const auto &id : record.metadata_identifier) {
+    metadata_identifier.push_back(id);
+  }
+
+  json metadata_subject = json::array();
+  for (const auto &s : record.metadata_subject) {
+    metadata_subject.push_back(s);
+  }
+
+  json metadata_title = json::array();
+  for (const auto &t : record.metadata_title) {
+    metadata_title.push_back(t);
+  }
+
+  spdlog::info(
+      "PostgreSQL upsert scaffold for {}.{} record={} embedding_dim={}", schema,
+      table, record.header_identifier, embedding.size());
 }
 
 void Database::execute(const std::string &query) {

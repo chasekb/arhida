@@ -8,6 +8,7 @@
 #include "config/Config.h"
 #include "utils/Logger.h"
 #include <curl/curl.h>
+#include <cstdint>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
@@ -63,6 +64,40 @@ void QdrantStorage::createIndexes(const std::string &schema_name,
                 schema_name, table_name);
 }
 
+void QdrantStorage::upsertRecord(const Record &record,
+                                 const std::vector<float> &embedding) {
+  json payload = {
+      {"header_identifier", record.header_identifier},
+      {"header_datestamp", record.header_datestamp},
+      {"header_setSpecs", record.header_setSpecs},
+      {"metadata_creator", record.metadata_creator},
+      {"metadata_date", record.metadata_date},
+      {"metadata_description", record.metadata_description},
+      {"metadata_identifier", record.metadata_identifier},
+      {"metadata_subject", record.metadata_subject},
+      {"metadata_title", record.metadata_title},
+      {"metadata_type", record.metadata_type}};
+
+  json request_body = {
+      {"points",
+       json::array({{{"id", makePointId(record.header_identifier)},
+                     {"vector", embedding},
+                     {"payload", payload}}})}};
+
+  long response_code = 0;
+  auto response = performRequest("PUT",
+                                 "/collections/" + collection_name_ + "/points",
+                                 request_body.dump(), &response_code);
+
+  if (response_code < 200 || response_code >= 300) {
+    spdlog::error("Failed to upsert Qdrant point for {}: HTTP {} response {}",
+                  record.header_identifier, response_code, response);
+    throw std::runtime_error("Qdrant point upsert failed");
+  }
+
+  spdlog::info("Upserted Qdrant point for {}", record.header_identifier);
+}
+
 std::string QdrantStorage::getCollectionName() const {
   return collection_name_;
 }
@@ -92,6 +127,9 @@ std::string QdrantStorage::performRequest(const std::string &method,
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
   } else if (method == "GET") {
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+  } else if (method == "POST") {
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
   } else {
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
@@ -182,4 +220,17 @@ void QdrantStorage::validateCollectionConfiguration() const {
 
   spdlog::info("Validated Qdrant collection '{}' with vector size {}",
                collection_name_, configured_size);
+}
+
+std::uint64_t QdrantStorage::makePointId(const std::string &identifier) const {
+  constexpr std::uint64_t fnv_offset = 1469598103934665603ULL;
+  constexpr std::uint64_t fnv_prime = 1099511628211ULL;
+
+  std::uint64_t hash = fnv_offset;
+  for (unsigned char ch : identifier) {
+    hash ^= static_cast<std::uint64_t>(ch);
+    hash *= fnv_prime;
+  }
+
+  return hash;
 }
