@@ -8,6 +8,7 @@
 
 #include "db/StorageEngine.h"
 #include <string>
+#include <vector>
 
 class QdrantStorage : public StorageEngine {
 public:
@@ -25,5 +26,15 @@ public:
     std::string getCollectionName() const;
 
 private:
+    std::string performRequest(const std::string& method,
+                               const std::string& path,
+                               const std::string& body = std::string(),
+                               long* response_code = nullptr) const;
+    bool collectionExists() const;
+    void ensureCollection();
+    void validateCollectionConfiguration() const;
+
     bool connected_;
+    std::string base_url_;
+    std::string collection_name_;
 };

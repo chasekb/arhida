@@ -1177,13 +1177,13 @@ This section breaks the migration into checkable implementation phases.
 
 - [x] Create a `QdrantStorage` implementation
 - [x] Implement Qdrant connection/bootstrap logic
-- [ ] Implement collection existence checks
-- [ ] Implement collection creation with correct dimension and distance metric
+- [x] Implement collection existence checks
+- [x] Implement collection creation with correct dimension and distance metric
 - [ ] Implement id generation from `header_identifier`
 - [ ] Implement point upsert logic
 - [ ] Implement payload serialization for all persisted metadata fields
 - [ ] Implement filtering/query support needed by backfill logic
-- [ ] Add startup validation that collection dimension matches embedding dimension
+- [x] Add startup validation that collection dimension matches embedding dimension
 - [x] Add logging and error handling for Qdrant request failures
 - [ ] Add tests or smoke checks for collection creation and upsert behavior
 
