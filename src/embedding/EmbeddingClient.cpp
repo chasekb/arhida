@@ -37,6 +37,8 @@ bool EmbeddingClient::healthCheck() const {
 
 std::vector<std::vector<float>>
 EmbeddingClient::embed(const std::vector<std::string>& inputs) const {
+  Config& config = Config::instance();
+
   if (inputs.empty()) {
     return {};
   }
@@ -66,7 +68,18 @@ EmbeddingClient::embed(const std::vector<std::string>& inputs) const {
   }
 
   auto payload = json::parse(response);
-  return payload.at("vectors").get<std::vector<std::vector<float>>>();
+  auto vectors = payload.at("vectors").get<std::vector<std::vector<float>>>();
+
+  for (const auto& vector : vectors) {
+    if (static_cast<int>(vector.size()) != config.getVectorSize()) {
+      throw std::runtime_error(
+          "Embedding vector size mismatch: expected " +
+          std::to_string(config.getVectorSize()) + ", got " +
+          std::to_string(vector.size()));
+    }
+  }
+
+  return vectors;
 }
 
 std::string EmbeddingClient::performRequest(const std::string& method,

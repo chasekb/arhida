@@ -1273,10 +1273,10 @@ This section breaks the migration into checkable implementation phases.
 
 - [x] Implement `EmbeddingClient` in the main C++ app
 - [x] Implement `/health` check on startup
-- [ ] Implement batched `/embed` calls
-- [ ] Implement retry logic for transient failures
-- [ ] Implement timeout handling
-- [ ] Validate embedding dimension against configuration
+- [x] Implement batched `/embed` calls
+- [x] Implement retry logic for transient failures
+- [x] Implement timeout handling
+- [x] Validate embedding dimension against configuration
 - [ ] Surface clear errors back to harvester flow
 - [ ] Add tests for success, retry, timeout, and invalid-dimension scenarios
 
