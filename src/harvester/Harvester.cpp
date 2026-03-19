@@ -6,6 +6,7 @@
 
 #include "harvester/Harvester.h"
 #include "config/Config.h"
+#include "embedding/EmbeddingTextBuilder.h"
 #include "utils/Logger.h"
 #include <chrono>
 #include <nlohmann/json.hpp>
@@ -14,17 +15,25 @@
 
 using json = nlohmann::json;
 
-Harvester::Harvester(StorageEngine &db) : db_(db), oai_client_(nullptr) {
+Harvester::Harvester(StorageEngine &db)
+    : db_(db), oai_client_(nullptr), embedding_client_(nullptr) {
   Config &config = Config::instance();
   // Use the correct arXiv OAI-PMH endpoint
   oai_client_ = new OaiClient("https://oaipmh.arxiv.org/oai");
   oai_client_->setRateLimitDelay(config.getRateLimitDelay());
   oai_client_->setMaxRetries(config.getMaxRetries());
+
+  if (config.getVectorDbProvider() == "qdrant") {
+    embedding_client_ = new EmbeddingClient();
+  }
 }
 
 Harvester::~Harvester() {
   if (oai_client_) {
     delete oai_client_;
+  }
+  if (embedding_client_) {
+    delete embedding_client_;
   }
 }
 
@@ -253,6 +262,15 @@ void Harvester::insertRecords(const std::vector<Record> &records,
 
   for (const auto &record : records) {
     try {
+      if (embedding_client_) {
+        std::string embedding_text = EmbeddingTextBuilder::build(record);
+        auto vectors = embedding_client_->embed({embedding_text});
+        if (vectors.empty()) {
+          throw std::runtime_error(
+              "Embeddings service returned no vectors for harvested record");
+        }
+      }
+
       // Convert vectors to JSON
       json header_setSpecs = json::array();
       for (const auto &s : record.header_setSpecs) {
@@ -319,8 +337,9 @@ void Harvester::insertRecords(const std::vector<Record> &records,
       }
 
     } catch (const std::exception &e) {
-      spdlog::error("Error inserting record {}: {}", record.header_identifier,
-                    e.what());
+      spdlog::error(
+          "Error processing record {} for persistence/embedding: {}",
+          record.header_identifier, e.what());
     }
   }
 

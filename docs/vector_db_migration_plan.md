@@ -1277,14 +1277,14 @@ This section breaks the migration into checkable implementation phases.
 - [x] Implement retry logic for transient failures
 - [x] Implement timeout handling
 - [x] Validate embedding dimension against configuration
-- [ ] Surface clear errors back to harvester flow
+- [x] Surface clear errors back to harvester flow
 - [ ] Add tests for success, retry, timeout, and invalid-dimension scenarios
 
 ## Phase 12: Harvester Refactor
 
 - [ ] Replace relational table initialization with vector-collection initialization
 - [ ] Replace SQL upsert assumptions with Qdrant upsert flow
-- [ ] Insert embedding-generation step into record ingestion flow
+- [x] Insert embedding-generation step into record ingestion flow
 - [ ] Persist vectors plus payload for harvested records
 - [ ] Refactor `getMissingDates()` behavior to work with Qdrant filters or checkpoints
 - [ ] Decide whether backfill state lives entirely in Qdrant payloads or in a separate checkpoint mechanism

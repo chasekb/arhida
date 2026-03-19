@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include "../db/StorageEngine.h"
+#include "../embedding/EmbeddingClient.h"
 #include "../oai/OaiClient.h"
 
 class Harvester {
@@ -24,6 +25,7 @@ public:
 private:
     StorageEngine& db_;
     OaiClient* oai_client_;
+    EmbeddingClient* embedding_client_;
     
     // Helper methods
     void ensureTableExists();
