@@ -16,6 +16,7 @@
 #include "db/Database.h"
 #include "db/QdrantStorage.h"
 #include "db/StorageEngine.h"
+#include "embedding/EmbeddingClient.h"
 #include "harvester/Harvester.h"
 #include "oai/OaiClient.h"
 #include "utils/Logger.h"
@@ -63,6 +64,15 @@ int main(int argc, char **argv) {
   int total_records = 0;
 
   try {
+    if (config.getVectorDbProvider() == "qdrant") {
+      EmbeddingClient embedding_client;
+      if (!embedding_client.healthCheck()) {
+        throw std::runtime_error(
+            "Embeddings service health check failed during startup");
+      }
+      spdlog::info("Embeddings service health check passed");
+    }
+
     // Initialize storage backend
     std::unique_ptr<StorageEngine> storage;
     if (config.getVectorDbProvider() == "qdrant") {
