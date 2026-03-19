@@ -14,7 +14,7 @@
 
 using json = nlohmann::json;
 
-Harvester::Harvester(Database &db) : db_(db), oai_client_(nullptr) {
+Harvester::Harvester(StorageEngine &db) : db_(db), oai_client_(nullptr) {
   Config &config = Config::instance();
   // Use the correct arXiv OAI-PMH endpoint
   oai_client_ = new OaiClient("https://oaipmh.arxiv.org/oai");

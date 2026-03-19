@@ -1,6 +1,6 @@
 /**
- * @file Database.h
- * @brief PostgreSQL database connection and operations
+ * @file QdrantStorage.h
+ * @brief Qdrant storage scaffold for vector persistence
  * @author Bernard Chase
  */
 
@@ -8,30 +8,22 @@
 
 #include "db/StorageEngine.h"
 #include <string>
-#include <memory>
-#include <libpq-fe.h>
 
-class Database : public StorageEngine {
+class QdrantStorage : public StorageEngine {
 public:
-    Database();
-    ~Database() override;
-    
+    QdrantStorage();
+    ~QdrantStorage() override = default;
+
     void connect() override;
     void disconnect() override;
     bool isConnected() const override;
-    
-    PGconn* getConnection() { return conn_; }
-    
-    // Schema and table operations
+
     void createSchema(const std::string& schema_name) override;
     void createTable(const std::string& schema_name, const std::string& table_name) override;
     void createIndexes(const std::string& schema_name, const std::string& table_name) override;
-    
-    // Query operations
-    void execute(const std::string& query);
-    PGresult* query(const std::string& query);
-    
+
+    std::string getCollectionName() const;
+
 private:
-    PGconn* conn_;
     bool connected_;
 };

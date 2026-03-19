@@ -8,12 +8,12 @@
 
 #include <string>
 #include <vector>
-#include "../db/Database.h"
+#include "../db/StorageEngine.h"
 #include "../oai/OaiClient.h"
 
 class Harvester {
 public:
-    Harvester(Database& db);
+    Harvester(StorageEngine& db);
     ~Harvester();
     
     // Harvest operations
@@ -22,7 +22,7 @@ public:
                        const std::vector<std::string>& set_specs);
     
 private:
-    Database& db_;
+    StorageEngine& db_;
     OaiClient* oai_client_;
     
     // Helper methods

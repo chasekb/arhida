@@ -46,6 +46,7 @@ set(SOURCES
     src/config/Config.cpp
     src/oai/OaiClient.cpp
     src/db/Database.cpp
+    src/db/QdrantStorage.cpp
     src/db/QueryBuilder.cpp
     src/harvester/Harvester.cpp
     src/harvester/RateLimiter.cpp
