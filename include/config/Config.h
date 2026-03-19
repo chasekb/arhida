@@ -23,6 +23,28 @@ public:
     int getPostgresPort() const { return port_; }
     std::string getPostgresSchema() const { return schema_; }
     std::string getPostgresTable() const { return table_; }
+
+    // Vector database configuration
+    std::string getVectorDbProvider() const { return vector_db_provider_; }
+    std::string getQdrantUrl() const { return qdrant_url_; }
+    std::string getQdrantCollection() const { return qdrant_collection_; }
+    int getVectorSize() const { return vector_size_; }
+
+    // Embeddings service configuration
+    std::string getEmbeddingServiceUrl() const { return embedding_service_url_; }
+    std::string getEmbeddingModelName() const { return embedding_model_name_; }
+    int getEmbeddingRequestTimeoutMs() const { return embedding_request_timeout_ms_; }
+    int getEmbeddingMaxBatchSize() const { return embedding_max_batch_size_; }
+    int getEmbeddingRetryCount() const { return embedding_retry_count_; }
+
+    // Embeddings runtime configuration
+    std::string getModelPath() const { return model_path_; }
+    std::string getTokenizerPath() const { return tokenizer_path_; }
+    std::string getDevice() const { return device_; }
+    std::string getOrtExecutionProvider() const { return ort_execution_provider_; }
+    std::string getCudaVisibleDevices() const { return cuda_visible_devices_; }
+    std::string getAcceleratorBackend() const { return accelerator_backend_; }
+    int getServicePort() const { return service_port_; }
     
     // arXiv configuration
     int getRateLimitDelay() const { return rate_limit_delay_; }
@@ -51,6 +73,28 @@ private:
     int port_;
     std::string schema_;
     std::string table_;
+
+    // Vector database settings
+    std::string vector_db_provider_;
+    std::string qdrant_url_;
+    std::string qdrant_collection_;
+    int vector_size_;
+
+    // Embeddings service settings
+    std::string embedding_service_url_;
+    std::string embedding_model_name_;
+    int embedding_request_timeout_ms_;
+    int embedding_max_batch_size_;
+    int embedding_retry_count_;
+
+    // Embeddings runtime settings
+    std::string model_path_;
+    std::string tokenizer_path_;
+    std::string device_;
+    std::string ort_execution_provider_;
+    std::string cuda_visible_devices_;
+    std::string accelerator_backend_;
+    int service_port_;
     
     // arXiv settings
     int rate_limit_delay_;

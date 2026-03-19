@@ -58,6 +58,35 @@ void Config::load() {
   schema_ = getEnv("POSTGRES_SCHEMA", "arxiv");
   table_ = getEnv("POSTGRES_TABLE", "metadata");
 
+  // Vector database settings
+  vector_db_provider_ = getEnv("VECTOR_DB_PROVIDER", "qdrant");
+  qdrant_url_ = getEnv("QDRANT_URL", "http://qdrant:6333");
+  qdrant_collection_ = getEnv("QDRANT_COLLECTION", "arxiv_metadata");
+  vector_size_ = std::stoi(getEnv("VECTOR_SIZE", "384"));
+
+  // Embeddings service settings
+  embedding_service_url_ =
+      getEnv("EMBEDDING_SERVICE_URL", "http://embeddings:8000");
+  embedding_model_name_ =
+      getEnv("EMBEDDING_MODEL_NAME", "bge-small-en-v1.5");
+  embedding_request_timeout_ms_ =
+      std::stoi(getEnv("EMBEDDING_REQUEST_TIMEOUT_MS", "30000"));
+  embedding_max_batch_size_ =
+      std::stoi(getEnv("EMBEDDING_MAX_BATCH_SIZE", "64"));
+  embedding_retry_count_ =
+      std::stoi(getEnv("EMBEDDING_RETRY_COUNT", "3"));
+
+  // Embeddings runtime settings
+  model_path_ =
+      getEnv("MODEL_PATH", "/models/bge-small-en-v1.5/model.onnx");
+  tokenizer_path_ =
+      getEnv("TOKENIZER_PATH", "/models/bge-small-en-v1.5/tokenizer");
+  device_ = getEnv("DEVICE", "cpu");
+  ort_execution_provider_ = getEnv("ORT_EXECUTION_PROVIDER", "CPU");
+  cuda_visible_devices_ = getEnv("CUDA_VISIBLE_DEVICES", "0");
+  accelerator_backend_ = getEnv("ACCELERATOR_BACKEND", "onnx");
+  service_port_ = std::stoi(getEnv("SERVICE_PORT", "8000"));
+
   // arXiv settings
   rate_limit_delay_ = std::stoi(getEnv("ARXIV_RATE_LIMIT_DELAY", "3"));
   batch_size_ = std::stoi(getEnv("ARXIV_BATCH_SIZE", "2000"));
