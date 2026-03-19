@@ -1189,12 +1189,12 @@ This section breaks the migration into checkable implementation phases.
 
 ## Phase 5: Embedding Text and Record Preparation
 
-- [ ] Implement `EmbeddingTextBuilder`
-- [ ] Define the canonical text layout for embeddings
-- [ ] Normalize whitespace and field ordering deterministically
-- [ ] Handle missing title/subject/abstract values consistently
+- [x] Implement `EmbeddingTextBuilder`
+- [x] Define the canonical text layout for embeddings
+- [x] Normalize whitespace and field ordering deterministically
+- [x] Handle missing title/subject/abstract values consistently
 - [ ] Decide whether additional metadata should be included in the embedding text now or later
-- [ ] Version the embedding text format conceptually in docs/code comments
+- [x] Version the embedding text format conceptually in docs/code comments
 - [ ] Add tests for text-building behavior
 
 ## Phase 6: C++ Embeddings Service Foundation
