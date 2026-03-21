@@ -1218,7 +1218,14 @@ Current smoke-check implementation for Phase 4:
 - [x] Handle missing title/subject/abstract values consistently
 - [x] Decide whether additional metadata should be included in the embedding text now or later
 - [x] Version the embedding text format conceptually in docs/code comments
-- [ ] Add tests for text-building behavior
+- [x] Add tests for text-building behavior
+
+Current test coverage for Phase 5 text-building behavior:
+
+- `tests/EmbeddingTextBuilderTest.cpp` validates:
+  - canonical output layout (`Title`, `Subjects`, `Description`)
+  - deterministic whitespace normalization
+  - `<missing>` fallback behavior for empty title/subject/description inputs
 
 ## Phase 6: C++ Embeddings Service Foundation
 

@@ -75,3 +75,15 @@ install(TARGETS arhida-cpp DESTINATION bin)
 
 # Testing (optional)
 enable_testing()
+
+add_executable(embedding_text_builder_test
+    tests/EmbeddingTextBuilderTest.cpp
+    src/embedding/EmbeddingTextBuilder.cpp
+)
+
+target_include_directories(embedding_text_builder_test PRIVATE include)
+
+add_test(
+    NAME embedding_text_builder_test
+    COMMAND embedding_text_builder_test
+)
