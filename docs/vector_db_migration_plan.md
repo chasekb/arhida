@@ -1352,15 +1352,15 @@ This section breaks the migration into checkable implementation phases.
 
 ## Phase 16: Documentation and Operations
 
-- [ ] Update `README.md` for the new architecture
+- [x] Update `README.md` for the new architecture
 - [ ] Update `.env.example`
-- [ ] Update Docker usage instructions
-- [ ] Document model artifact preparation and volume mounting
-- [ ] Document CPU, CUDA, and MLX deployment modes
-- [ ] Document how to rebuild or recreate a Qdrant collection
-- [ ] Document migration workflow from PostgreSQL to Qdrant
-- [ ] Document backup/restore strategy for Qdrant storage
-- [ ] Document operational health checks and expected endpoints
+- [x] Update Docker usage instructions
+- [x] Document model artifact preparation and volume mounting
+- [x] Document CPU, CUDA, and MLX deployment modes
+- [x] Document how to rebuild or recreate a Qdrant collection
+- [x] Document migration workflow from PostgreSQL to Qdrant
+- [x] Document backup/restore strategy for Qdrant storage
+- [x] Document operational health checks and expected endpoints
 
 ## Phase 17: Cutover and Cleanup
 

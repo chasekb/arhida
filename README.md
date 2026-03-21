@@ -98,6 +98,97 @@ Apple Silicon / MLX development path:
 DEVICE=mlx ACCELERATOR_BACKEND=mlx docker-compose up -d
 ```
 
+## Model Artifacts and Volume Mounting
+
+The embeddings container expects model artifacts mounted read-only from the
+`model-files` volume.
+
+Expected layout:
+
+```text
+/models/
+  bge-small-en-v1.5/
+    model.onnx
+    tokenizer/
+      tokenizer.json
+      tokenizer_config.json
+      special_tokens_map.json
+      vocab.txt (or equivalent vocab files)
+```
+
+Compose wiring (already present in `docker-compose.yaml`):
+
+- `model-files:/models:ro`
+- `MODEL_PATH=/models/bge-small-en-v1.5/model.onnx`
+- `TOKENIZER_PATH=/models/bge-small-en-v1.5/tokenizer`
+
+## Collection Lifecycle (Rebuild/Recreate)
+
+If you change embedding model or vector dimension, recreate the collection so
+Qdrant schema matches output vectors.
+
+```bash
+# stop app writes first
+docker-compose stop app
+
+# delete old collection
+curl -X DELETE "http://localhost:6333/collections/arxiv_metadata"
+
+# restart app so it re-creates collection with configured VECTOR_SIZE
+docker-compose up -d app
+```
+
+> Use the configured collection name from `QDRANT_COLLECTION` instead of
+> `arxiv_metadata` when different.
+
+## Migration Workflow (PostgreSQL -> Qdrant)
+
+Current migration posture:
+
+1. Keep legacy PostgreSQL env/secrets available only for migration tooling.
+2. Run harvester in vector mode (`VECTOR_DB_PROVIDER=qdrant`).
+3. Validate embeddings service health (`/health`) and Qdrant health (`/healthz`).
+4. Backfill and recent runs write vectors + payloads into Qdrant.
+5. Verify data parity/coverage before removing Postgres runtime dependencies.
+
+## Backup and Restore (Qdrant Storage)
+
+Qdrant data is persisted in the `qdrant-storage` Docker volume.
+
+Backup:
+
+```bash
+docker run --rm \
+  -v qdrant-storage:/source \
+  -v "$PWD":/backup \
+  alpine tar czf /backup/qdrant-storage-backup.tgz -C /source .
+```
+
+Restore:
+
+```bash
+docker run --rm \
+  -v qdrant-storage:/target \
+  -v "$PWD":/backup \
+  alpine sh -c "cd /target && tar xzf /backup/qdrant-storage-backup.tgz"
+```
+
+## Operational Health Checks
+
+Expected service endpoints:
+
+- App container healthcheck: `./arhida-cpp --help`
+- Qdrant health: `GET http://localhost:6333/healthz`
+- Embeddings health: `GET http://localhost:8000/health`
+
+Quick verification:
+
+```bash
+curl -fsS http://localhost:6333/healthz
+curl -fsS http://localhost:8000/health
+docker-compose ps
+```
+
 ## Project Structure
 
 ```
