@@ -245,6 +245,12 @@ Qdrant storage smoke check (collection create + upsert + verify + cleanup):
 bash scripts/qdrant_smoke.sh
 ```
 
+Embeddings service smoke check (`/health` + `/embed` + oversized batch guard):
+
+```bash
+bash scripts/embeddings_smoke.sh
+```
+
 ## Project Structure
 
 ```

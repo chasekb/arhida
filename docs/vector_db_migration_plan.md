@@ -1360,8 +1360,8 @@ Current implementation details for Phase 8 progress:
 - [x] Implement structured JSON error responses
 - [ ] Implement latency and batch-size logging
 - [x] Implement health state reporting only after successful warmup
-- [ ] Add smoke tests for `/health`
-- [ ] Add smoke tests for `/embed`
+- [x] Add smoke tests for `/health`
+- [x] Add smoke tests for `/embed`
 - [ ] Add load testing or benchmark pass for representative batch sizes
 
 Current implementation details for Phase 10 progress:
@@ -1373,6 +1373,12 @@ Current implementation details for Phase 10 progress:
   - malformed JSON
   - backend runtime/output-shape failures
 - Service startup now runs backend warmup and only enters serving mode on success; `/health` includes `warmup_complete: true` for ready state.
+- Added `scripts/embeddings_smoke.sh` to validate embeddings-service behavior end to end:
+  - waits for `/health` readiness
+  - verifies `ok=true` and `warmup_complete=true`
+  - verifies `/embed` response count/dimension alignment
+  - verifies oversized batch error path returns HTTP `400` + `batch_too_large`
+- `README.md` now includes usage guidance for the embeddings smoke check script.
 
 ## Phase 11: Application-Side Embedding Client
 
