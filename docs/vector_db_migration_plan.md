@@ -1272,8 +1272,8 @@ Current implementation details for Phase 6 foundation:
 - [ ] Prepare tokenizer assets for the selected embedding model
 - [x] Define mounted model directory layout under `/models`
 - [x] Implement startup validation for required model/tokenizer files
-- [ ] Document artifact preparation and placement steps
-- [ ] Decide how model upgrades/rollbacks will be handled operationally
+- [x] Document artifact preparation and placement steps
+- [x] Decide how model upgrades/rollbacks will be handled operationally
 
 Current implementation details for Phase 7 progress:
 
@@ -1284,6 +1284,10 @@ Current implementation details for Phase 7 progress:
   - model file existence check for `MODEL_PATH`
   - tokenizer directory + `tokenizer.json` existence checks for `TOKENIZER_PATH`
 - Validation behavior is controlled by `STRICT_MODEL_VALIDATION` (default `true`) and fails fast with clear startup errors when required artifacts are missing.
+- `README.md` now documents:
+  - explicit artifact preparation/placement steps for ONNX + tokenizer assets
+  - startup validation behavior and health verification
+  - operational model upgrade and rollback workflow with collection rebuild guidance
 
 ## Phase 8: C++ Inference Engine Implementation
 

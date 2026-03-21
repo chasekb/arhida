@@ -122,6 +122,56 @@ Compose wiring (already present in `docker-compose.yaml`):
 - `MODEL_PATH=/models/bge-small-en-v1.5/model.onnx`
 - `TOKENIZER_PATH=/models/bge-small-en-v1.5/tokenizer`
 
+### Artifact Preparation Steps (Phase 7)
+
+1. Export/pin the embedding model to ONNX format (`model.onnx`) for the selected
+   model revision.
+2. Collect tokenizer assets for the same model revision (must include
+   `tokenizer.json`).
+3. Place artifacts into the mounted layout under `/models`:
+
+```text
+/models/
+  bge-small-en-v1.5/
+    model.onnx
+    tokenizer/
+      tokenizer.json
+      tokenizer_config.json
+      special_tokens_map.json
+      vocab.txt (or equivalent vocab files)
+```
+
+4. Start the embeddings service with strict validation enabled
+   (`STRICT_MODEL_VALIDATION=true`, default behavior).
+5. Verify startup health:
+
+```bash
+curl -fsS http://localhost:8000/health | jq
+```
+
+The service startup will fail fast when `MODEL_PATH` or tokenizer assets are
+missing, preventing partial/misconfigured deployments.
+
+### Model Upgrade/Rollback Workflow
+
+Recommended model lifecycle:
+
+1. Stage new artifacts under a new model directory (for example
+   `/models/bge-small-en-v1.5-r2/`).
+2. Update compose/runtime variables (`MODEL_NAME`, `MODEL_PATH`,
+   `TOKENIZER_PATH`, `VECTOR_SIZE`) to the new model revision.
+3. Recreate the Qdrant collection so vector dimension/schema aligns with the new
+   model output.
+4. Restart embeddings and app services, then run health checks and ingestion
+   smoke checks.
+5. Keep prior model artifacts available for rapid rollback.
+
+Rollback strategy:
+
+- revert `MODEL_*`/`VECTOR_SIZE` env values to the previous model revision
+- recreate collection for the previous dimension if needed
+- restart services and re-run health checks
+
 ## Collection Lifecycle (Rebuild/Recreate)
 
 If you change embedding model or vector dimension, recreate the collection so
