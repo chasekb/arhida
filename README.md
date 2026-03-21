@@ -1,95 +1,101 @@
 # arXiv Academic Paper Metadata Harvester (C++)
 
-A high-performance C++ implementation of the arXiv Academic Paper Metadata Harvester. This application harvests academic paper metadata from arXiv.org's OAI-PMH interface and stores it in PostgreSQL.
+High-performance C++ harvester for arXiv OAI-PMH metadata with a vector-first
+runtime path.
+
+The active migration target is:
+
+- **Qdrant** as the primary persistence backend
+- **Embeddings service** (`/health`, `/embed`) for vector generation
+- **PostgreSQL kept temporarily** for migration compatibility tooling
 
 ## Features
 
-- **OAI-PMH Client**: Harvests metadata from arXiv.org's OAI-PMH interface
-- **PostgreSQL Storage**: Stores data in PostgreSQL with JSONB fields
-- **Rate Limiting**: Implements 3-second delays to comply with arXiv.org's terms of use
-- **Batch Processing**: Processes records in batches of up to 2,000 records
-- **Backfill Support**: Fill in missing dates from the database
-- **CLI Interface**: Command-line interface with multiple modes
+- **OAI-PMH Client**: harvests metadata from arXiv.org
+- **Vector persistence**: stores embeddings + payload in Qdrant
+- **Embedding integration**: calls local embedding service over HTTP
+- **Backfill support**: finds missing dates through backend-specific queries
+- **Rate limiting**: configurable request delays to comply with arXiv policy
+- **CLI interface**: `recent`, `backfill`, and `both` modes
 
-## Requirements
+## Runtime Topology (Docker Compose)
 
-- C++20 compatible compiler (GCC 13+)
-- CMake 3.16+
-- PostgreSQL libpq
-- libcurl
-- libxml2
+- `app` (`ghcr.io/chasekb/arhida:latest`)
+- `qdrant` (`qdrant/qdrant:latest`)
+- `embeddings` (`ghcr.io/chasekb/arhida-embeddings:local`)
 
-## Building
+Health endpoints used in compose:
 
-### Local Build
-
-```bash
-# Create build directory
-mkdir build && cd build
-
-# Configure
-cmake .. -DCMAKE_BUILD_TYPE=Release
-
-# Build
-make -j$(nproc)
-```
-
-### Docker Build
-
-```bash
-# Build the Docker image
-docker build -t arhida:latest .
-
-# Or use docker-compose with the build configuration file
-docker-compose -f docker-compose.yaml -f docker-compose.build.yaml build
-docker-compose -f docker-compose.yaml -f docker-compose.build.yaml up
-```
+- Qdrant: `GET http://qdrant:6333/healthz`
+- Embeddings: `GET http://embeddings:8000/health`
 
 ## Configuration
 
-Configure the application through environment variables:
+Primary runtime variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_HOST` | `localhost` | PostgreSQL host |
-| `POSTGRES_DB` | - | Database name |
-| `POSTGRES_USER` | - | Database user |
-| `POSTGRES_PASSWORD` | - | Database password |
-| `POSTGRES_PORT` | `5432` | PostgreSQL port |
-| `POSTGRES_SCHEMA` | `arxiv` | Schema name |
-| `POSTGRES_TABLE` | `metadata` | Table name |
+| `VECTOR_DB_PROVIDER` | `qdrant` | Storage backend selector |
+| `QDRANT_URL` | `http://qdrant:6333` | Qdrant base URL |
+| `QDRANT_COLLECTION` | `arxiv_metadata` | Qdrant collection |
+| `VECTOR_SIZE` | `384` | Embedding/vector dimension |
+| `EMBEDDING_SERVICE_URL` | `http://embeddings:8000` | Embedding service URL |
+| `EMBEDDING_MODEL_NAME` | `bge-small-en-v1.5` | Embedding model identifier |
+| `EMBEDDING_REQUEST_TIMEOUT_MS` | `30000` | Embed request timeout |
+| `EMBEDDING_MAX_BATCH_SIZE` | `64` | Max embedding batch size |
+| `EMBEDDING_RETRY_COUNT` | `3` | Embed retry count |
 | `ARXIV_RATE_LIMIT_DELAY` | `3` | Delay between requests (seconds) |
 | `ARXIV_BATCH_SIZE` | `2000` | Records per batch |
-| `ARXIV_MAX_RETRIES` | `3` | Maximum retries |
+| `ARXIV_MAX_RETRIES` | `3` | Max arXiv retries |
 | `ARXIV_RETRY_AFTER` | `5` | Retry delay (seconds) |
+
+Additional accelerator/runtime variables for embeddings container:
+
+- `DEVICE=cpu|cuda|mlx`
+- `ORT_EXECUTION_PROVIDER=CPU|CUDA`
+- `ACCELERATOR_BACKEND=onnx|mlx`
+- `MODEL_PATH`, `TOKENIZER_PATH`, `CUDA_VISIBLE_DEVICES`
+
+> Transitional PostgreSQL env vars remain in compose for migration utilities.
 
 ## Usage
 
-### Command-Line Options
+### CLI
 
 ```bash
-# Recent harvest (last 2 days)
 ./arhida-cpp --mode recent
-
-# Backfill missing dates
-./arhida-cpp --mode backfill
-
-# Both recent and backfill
-./arhida-cpp --mode both --start-date 2020-01-01
-
-# Custom set specifications
-./arhida-cpp --mode backfill --set-specs physics math cs
+./arhida-cpp --mode backfill --start-date 2020-01-01 --end-date 2020-01-31
+./arhida-cpp --mode both --set-specs physics math cs
 ```
 
-### Docker Usage
+### Docker Compose
 
 ```bash
-# Pull the pre-built image and start the application
 docker-compose pull
 docker-compose up -d
 
-# Run a specific command using docker-compose
-docker-compose run app ./arhida-cpp --mode recent
+# one-off run
+docker-compose run --rm app ./arhida-cpp --mode recent
+```
+
+### Deployment mode examples
+
+CPU-only:
+
+```bash
+DEVICE=cpu ORT_EXECUTION_PROVIDER=CPU ACCELERATOR_BACKEND=onnx docker-compose up -d
+```
+
+CUDA-enabled:
+
+```bash
+DEVICE=cuda ORT_EXECUTION_PROVIDER=CUDA ACCELERATOR_BACKEND=onnx docker-compose up -d
+```
+
+Apple Silicon / MLX development path:
+
+```bash
+DEVICE=mlx ACCELERATOR_BACKEND=mlx docker-compose up -d
 ```
 
 ## Project Structure
@@ -116,31 +122,19 @@ arhida/
 └── legacy_python/         # Python reference implementation
 ```
 
-## Database Schema
+## Persistence Model
 
-The application creates the following schema in PostgreSQL:
+Qdrant points contain:
 
-```sql
-CREATE TABLE IF NOT EXISTS arxiv.metadata (
-    id SERIAL PRIMARY KEY,
-    header_datestamp TIMESTAMP,
-    header_identifier VARCHAR(255) UNIQUE NOT NULL,
-    header_setSpecs JSONB,
-    metadata_creator JSONB,
-    metadata_date JSONB,
-    metadata_description TEXT,
-    metadata_identifier JSONB,
-    metadata_subject JSONB,
-    metadata_title JSONB,
-    metadata_type VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+- deterministic id from `header_identifier`
+- embedding vector (`VECTOR_SIZE`)
+- payload fields for harvested metadata:
+  - `header_*` values
+  - `metadata_*` values
 
 ## Rate Limiting
 
-This application complies with arXiv.org's terms of use:
+The harvester complies with arXiv.org's usage constraints:
 
 - Maximum 1 request every 3 seconds
 - Single connection at a time

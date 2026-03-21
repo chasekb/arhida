@@ -1142,9 +1142,9 @@ This section breaks the migration into checkable implementation phases.
 - [x] Ensure services share the correct internal network
 - [ ] Decide whether to remove or temporarily keep the external PostgreSQL network dependency
 - [ ] Document example compose overrides for:
-  - [ ] CPU-only deployment
-  - [ ] CUDA-enabled deployment
-  - [ ] Apple Silicon / MLX development
+  - [x] CPU-only deployment
+  - [x] CUDA-enabled deployment
+  - [x] Apple Silicon / MLX development
 
 ## Phase 2: Configuration Refactor in the C++ App
 
@@ -1157,7 +1157,7 @@ This section breaks the migration into checkable implementation phases.
 - [x] Add config for accelerator/backend awareness if needed by the app
 - [ ] Preserve temporary PostgreSQL settings for migration tooling if still needed
 - [x] Update `.env.example` with new vector/embedding configuration
-- [ ] Remove or de-emphasize Postgres-only runtime guidance in docs/examples
+- [x] Remove or de-emphasize Postgres-only runtime guidance in docs/examples
 
 ## Phase 3: Storage Abstraction in the C++ App
 

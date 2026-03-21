@@ -1,5 +1,9 @@
 # C++ Migration Plan for arXiv Harvester
 
+> **Note:** this document captures the original PostgreSQL-first transition plan.
+> The active migration source of truth is now `docs/vector_db_migration_plan.md`
+> (Qdrant + embeddings-service architecture).
+
 ## Project Overview
 
 The current Python project (`arhida.py`) is an arXiv Academic Paper Metadata Harvester that:
