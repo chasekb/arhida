@@ -78,6 +78,17 @@ bool Database::isConnected() const {
   return connected_ && conn_ && PQstatus(conn_) == CONNECTION_OK;
 }
 
+void Database::initialize() {
+  Config &config = Config::instance();
+  std::string schema = config.getPostgresSchema();
+  std::string table = config.getPostgresTable();
+
+  createSchema(schema);
+  createTable(schema, table);
+  createIndexes(schema, table);
+  validateStorageConfiguration();
+}
+
 void Database::createSchema(const std::string &schema_name) {
   std::string query = "CREATE SCHEMA IF NOT EXISTS " + schema_name;
   execute(query);

@@ -1172,7 +1172,7 @@ This section breaks the migration into checkable implementation phases.
 - [x] Refactor harvester code to depend on the abstraction rather than `Database`
 - [x] Add initial runtime backend selection between PostgreSQL and Qdrant
 - [ ] Decide whether the existing Postgres implementation becomes `PostgresStorage` or remains migration-only
-- [ ] Separate schema/table responsibilities from general storage orchestration
+- [x] Separate schema/table responsibilities from general storage orchestration
 - [ ] Define abstraction methods for:
   - [x] connect / initialize
   - [x] upsert record

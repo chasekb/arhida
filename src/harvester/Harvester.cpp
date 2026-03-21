@@ -37,20 +37,7 @@ Harvester::~Harvester() {
 }
 
 void Harvester::ensureStorageInitialized() {
-  Config &config = Config::instance();
-
-  if (config.getVectorDbProvider() == "qdrant") {
-    db_.createTable(std::string(), config.getQdrantCollection());
-    db_.validateStorageConfiguration();
-    return;
-  }
-
-  std::string schema = config.getPostgresSchema();
-  std::string table = config.getPostgresTable();
-  db_.createSchema(schema);
-  db_.createTable(schema, table);
-  db_.createIndexes(schema, table);
-  db_.validateStorageConfiguration();
+  db_.initialize();
 }
 
 int Harvester::harvestRecent(const std::vector<std::string> &set_specs) {

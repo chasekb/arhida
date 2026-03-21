@@ -18,6 +18,7 @@ public:
     void connect() override;
     void disconnect() override;
     bool isConnected() const override;
+    void initialize() override;
 
     void createSchema(const std::string& schema_name) override;
     void createTable(const std::string& schema_name, const std::string& table_name) override;

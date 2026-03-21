@@ -51,6 +51,11 @@ void QdrantStorage::disconnect() { connected_ = false; }
 
 bool QdrantStorage::isConnected() const { return connected_; }
 
+void QdrantStorage::initialize() {
+  createTable(std::string(), collection_name_);
+  validateStorageConfiguration();
+}
+
 void QdrantStorage::createSchema(const std::string &schema_name) {
   spdlog::debug("QdrantStorage::createSchema called with '{}' (no-op)", schema_name);
 }

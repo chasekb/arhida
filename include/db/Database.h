@@ -19,6 +19,7 @@ public:
     void connect() override;
     void disconnect() override;
     bool isConnected() const override;
+    void initialize() override;
     
     PGconn* getConnection() { return conn_; }
     
