@@ -87,3 +87,21 @@ add_test(
     NAME embedding_text_builder_test
     COMMAND embedding_text_builder_test
 )
+
+add_executable(embedding_client_test
+    tests/EmbeddingClientTest.cpp
+    src/embedding/EmbeddingClient.cpp
+    src/config/Config.cpp
+)
+
+target_include_directories(embedding_client_test PRIVATE include)
+
+target_link_libraries(embedding_client_test
+    ${LIBCURL_LIBRARIES}
+    nlohmann_json::nlohmann_json
+)
+
+add_test(
+    NAME embedding_client_test
+    COMMAND embedding_client_test
+)

@@ -1317,7 +1317,16 @@ Current test coverage for Phase 5 text-building behavior:
 - [x] Implement timeout handling
 - [x] Validate embedding dimension against configuration
 - [x] Surface clear errors back to harvester flow
-- [ ] Add tests for success, retry, timeout, and invalid-dimension scenarios
+- [x] Add tests for success, retry, timeout, and invalid-dimension scenarios
+
+Current test coverage for Phase 11 embedding client behavior:
+
+- `tests/EmbeddingClientTest.cpp` validates:
+  - successful embedding response handling
+  - batch-size guard failures
+  - retry behavior after non-2xx responses
+  - invalid-dimension response failures
+- `CMakeLists.txt` now registers `embedding_client_test` with CTest.
 
 ## Phase 12: Harvester Refactor
 

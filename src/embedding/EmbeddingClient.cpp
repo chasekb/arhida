@@ -27,7 +27,19 @@ EmbeddingClient::EmbeddingClient() {
   timeout_ms_ = config.getEmbeddingRequestTimeoutMs();
   max_batch_size_ = config.getEmbeddingMaxBatchSize();
   retry_count_ = config.getEmbeddingRetryCount();
+  expected_vector_size_ = config.getVectorSize();
 }
+
+EmbeddingClient::EmbeddingClient(const std::string& base_url,
+                                 int timeout_ms,
+                                 int max_batch_size,
+                                 int retry_count,
+                                 int expected_vector_size)
+    : base_url_(base_url),
+      timeout_ms_(timeout_ms),
+      max_batch_size_(max_batch_size),
+      retry_count_(retry_count),
+      expected_vector_size_(expected_vector_size) {}
 
 bool EmbeddingClient::healthCheck() const {
   long response_code = 0;
@@ -37,8 +49,6 @@ bool EmbeddingClient::healthCheck() const {
 
 std::vector<std::vector<float>>
 EmbeddingClient::embed(const std::vector<std::string>& inputs) const {
-  Config& config = Config::instance();
-
   if (inputs.empty()) {
     return {};
   }
@@ -70,11 +80,18 @@ EmbeddingClient::embed(const std::vector<std::string>& inputs) const {
   auto payload = json::parse(response);
   auto vectors = payload.at("vectors").get<std::vector<std::vector<float>>>();
 
+  if (vectors.size() != inputs.size()) {
+    throw std::runtime_error("Embedding response size mismatch: expected " +
+                             std::to_string(inputs.size()) + ", got " +
+                             std::to_string(vectors.size()));
+  }
+
   for (const auto& vector : vectors) {
-    if (static_cast<int>(vector.size()) != config.getVectorSize()) {
+    if (expected_vector_size_ > 0 &&
+        static_cast<int>(vector.size()) != expected_vector_size_) {
       throw std::runtime_error(
           "Embedding vector size mismatch: expected " +
-          std::to_string(config.getVectorSize()) + ", got " +
+          std::to_string(expected_vector_size_) + ", got " +
           std::to_string(vector.size()));
     }
   }
