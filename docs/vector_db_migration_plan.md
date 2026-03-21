@@ -1291,10 +1291,10 @@ Current implementation details for Phase 7 progress:
 
 ## Phase 8: C++ Inference Engine Implementation
 
-- [ ] Implement `EmbeddingBackend` interface
-- [ ] Implement `OnnxCpuBackend`
-- [ ] Implement `OnnxCudaBackend`
-- [ ] Define plan for `MlxBackend`
+- [x] Implement `EmbeddingBackend` interface
+- [x] Implement `OnnxCpuBackend`
+- [x] Implement `OnnxCudaBackend`
+- [x] Define plan for `MlxBackend`
 - [ ] Implement ONNX Runtime session initialization
 - [ ] Implement batch inference
 - [ ] Implement output-dimension validation
@@ -1302,6 +1302,26 @@ Current implementation details for Phase 7 progress:
 - [ ] Implement runtime warmup inference
 - [ ] Implement tokenizer integration
 - [ ] Add tests or verification for returned embedding dimension and stability
+
+Current implementation details for Phase 8 progress:
+
+- Added backend abstraction contract:
+  - `embeddings_service/include/embedding/EmbeddingBackend.h`
+  - includes shared `BatchInput` alias and methods: `initialize()`, `embed()`, `backendName()`
+- Added initial backend implementations (scaffold level):
+  - `OnnxCpuBackend`
+  - `OnnxCudaBackend`
+  - `MlxBackend`
+  - each validates positive output dimension at initialization and returns deterministic placeholder vectors sized to configured dimension
+- Added backend selection factory:
+  - `embeddings_service/include/embedding/BackendFactory.h`
+  - `embeddings_service/src/embedding/BackendFactory.cpp`
+  - selection rules currently map `DEVICE`/`ACCELERATOR_BACKEND` to CPU/CUDA/MLX backends
+- Integrated backend lifecycle into HTTP layer:
+  - backend is created + initialized at service startup
+  - `/health` now reports selected backend name
+  - `/embed` routes requests through selected backend implementation
+- Updated embeddings service `CMakeLists.txt` to compile and link new backend source files.
 
 ## Phase 9: Accelerator Support
 

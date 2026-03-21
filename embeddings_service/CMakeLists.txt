@@ -40,6 +40,10 @@ endif()
 add_executable(arhida-embeddings-service
     src/main.cpp
     src/config/EmbeddingServiceConfig.cpp
+    src/embedding/BackendFactory.cpp
+    src/embedding/OnnxCpuBackend.cpp
+    src/embedding/OnnxCudaBackend.cpp
+    src/embedding/MlxBackend.cpp
     src/server/HttpServer.cpp
 )
 

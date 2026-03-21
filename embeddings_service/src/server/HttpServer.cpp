@@ -1,5 +1,7 @@
 #include "server/HttpServer.h"
 
+#include "embedding/BackendFactory.h"
+
 #include <drogon/drogon.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -31,10 +33,13 @@ HttpServer::HttpServer(EmbeddingServiceConfig config)
     : config_(std::move(config)) {}
 
 void HttpServer::run() const {
+  auto backend = createEmbeddingBackend(config_);
+  backend->initialize();
+
   drogon::app().registerHandler(
       "/health",
-      [cfg = config_](const drogon::HttpRequestPtr &,
-                      std::function<void(const drogon::HttpResponsePtr &)> &&cb) {
+      [cfg = config_, backend](const drogon::HttpRequestPtr &,
+                               std::function<void(const drogon::HttpResponsePtr &)> &&cb) {
         json payload = {
             {"ok", true},
             {"service", "arhida-embeddings-service"},
@@ -44,6 +49,7 @@ void HttpServer::run() const {
             {"max_batch_size", cfg.max_batch_size},
             {"device", cfg.device},
             {"accelerator_backend", cfg.accelerator_backend},
+            {"backend", backend->backendName()},
             {"model_loaded", cfg.model_loaded},
             {"tokenizer_loaded", cfg.tokenizer_loaded},
         };
@@ -53,8 +59,8 @@ void HttpServer::run() const {
 
   drogon::app().registerHandler(
       "/embed",
-      [cfg = config_](const drogon::HttpRequestPtr &req,
-                      std::function<void(const drogon::HttpResponsePtr &)> &&cb) {
+      [cfg = config_, backend](const drogon::HttpRequestPtr &req,
+                               std::function<void(const drogon::HttpResponsePtr &)> &&cb) {
         try {
           auto body = json::parse(req->getBody());
           if (!body.contains("inputs") || !body["inputs"].is_array()) {
@@ -78,16 +84,18 @@ void HttpServer::run() const {
             }
           }
 
-          std::vector<std::vector<float>> vectors;
-          vectors.reserve(inputs.size());
-          for (std::size_t i = 0; i < inputs.size(); ++i) {
-            vectors.emplace_back(static_cast<std::size_t>(cfg.model_dimension),
-                                 0.0f);
+          BatchInput batch;
+          batch.reserve(inputs.size());
+          for (const auto& item : inputs) {
+            batch.push_back(item.get<std::string>());
           }
+
+          auto vectors = backend->embed(batch);
 
           json payload = {
               {"model", cfg.model_name},
               {"dimension", cfg.model_dimension},
+              {"backend", backend->backendName()},
               {"vectors", vectors},
           };
           cb(buildJsonResponse(payload, drogon::k200OK));
