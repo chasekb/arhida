@@ -1296,10 +1296,10 @@ Current implementation details for Phase 7 progress:
 - [x] Implement `OnnxCudaBackend`
 - [x] Define plan for `MlxBackend`
 - [ ] Implement ONNX Runtime session initialization
-- [ ] Implement batch inference
-- [ ] Implement output-dimension validation
+- [x] Implement batch inference
+- [x] Implement output-dimension validation
 - [ ] Implement vector normalization strategy
-- [ ] Implement runtime warmup inference
+- [x] Implement runtime warmup inference
 - [ ] Implement tokenizer integration
 - [ ] Add tests or verification for returned embedding dimension and stability
 
@@ -1321,7 +1321,13 @@ Current implementation details for Phase 8 progress:
   - backend is created + initialized at service startup
   - `/health` now reports selected backend name
   - `/embed` routes requests through selected backend implementation
+- Added startup warmup validation path:
+  - server performs a one-item warmup call against the selected backend before serving requests
+  - startup fails fast if warmup output shape does not match configured dimension
 - Updated embeddings service `CMakeLists.txt` to compile and link new backend source files.
+- `/embed` now enforces backend output shape checks at runtime:
+  - vector count must match request input count
+  - each returned vector must match configured model dimension
 
 ## Phase 9: Accelerator Support
 
@@ -1351,12 +1357,22 @@ Current implementation details for Phase 8 progress:
 - [ ] Implement request validation for `/embed`
 - [ ] Implement batch-size limits
 - [ ] Implement timeout behavior
-- [ ] Implement structured JSON error responses
+- [x] Implement structured JSON error responses
 - [ ] Implement latency and batch-size logging
-- [ ] Implement health state reporting only after successful warmup
+- [x] Implement health state reporting only after successful warmup
 - [ ] Add smoke tests for `/health`
 - [ ] Add smoke tests for `/embed`
 - [ ] Add load testing or benchmark pass for representative batch sizes
+
+Current implementation details for Phase 10 progress:
+
+- `/embed` returns structured JSON error envelopes for:
+  - invalid request payload shape
+  - oversized batches
+  - invalid input item types
+  - malformed JSON
+  - backend runtime/output-shape failures
+- Service startup now runs backend warmup and only enters serving mode on success; `/health` includes `warmup_complete: true` for ready state.
 
 ## Phase 11: Application-Side Embedding Client
 

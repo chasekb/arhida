@@ -6,6 +6,8 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include <memory>
+
 namespace {
 using json = nlohmann::json;
 
@@ -36,10 +38,22 @@ void HttpServer::run() const {
   auto backend = createEmbeddingBackend(config_);
   backend->initialize();
 
+  // Startup warmup: fail fast if backend cannot produce expected output shape.
+  auto warmup_vectors = backend->embed(BatchInput{"warmup"});
+  if (warmup_vectors.size() != 1 ||
+      warmup_vectors[0].size() != static_cast<std::size_t>(config_.model_dimension)) {
+    throw std::runtime_error(
+        "Embedding backend warmup output dimension mismatch");
+  }
+
+  auto shared_backend =
+      std::shared_ptr<EmbeddingBackend>(std::move(backend));
+
   drogon::app().registerHandler(
       "/health",
-      [cfg = config_, backend](const drogon::HttpRequestPtr &,
-                               std::function<void(const drogon::HttpResponsePtr &)> &&cb) {
+      [cfg = config_, shared_backend](
+          const drogon::HttpRequestPtr &,
+          std::function<void(const drogon::HttpResponsePtr &)> &&cb) {
         json payload = {
             {"ok", true},
             {"service", "arhida-embeddings-service"},
@@ -49,9 +63,10 @@ void HttpServer::run() const {
             {"max_batch_size", cfg.max_batch_size},
             {"device", cfg.device},
             {"accelerator_backend", cfg.accelerator_backend},
-            {"backend", backend->backendName()},
+            {"backend", shared_backend->backendName()},
             {"model_loaded", cfg.model_loaded},
             {"tokenizer_loaded", cfg.tokenizer_loaded},
+            {"warmup_complete", true},
         };
         cb(buildJsonResponse(payload, drogon::k200OK));
       },
@@ -59,8 +74,9 @@ void HttpServer::run() const {
 
   drogon::app().registerHandler(
       "/embed",
-      [cfg = config_, backend](const drogon::HttpRequestPtr &req,
-                               std::function<void(const drogon::HttpResponsePtr &)> &&cb) {
+      [cfg = config_, shared_backend](
+          const drogon::HttpRequestPtr &req,
+          std::function<void(const drogon::HttpResponsePtr &)> &&cb) {
         try {
           auto body = json::parse(req->getBody());
           if (!body.contains("inputs") || !body["inputs"].is_array()) {
@@ -90,17 +106,36 @@ void HttpServer::run() const {
             batch.push_back(item.get<std::string>());
           }
 
-          auto vectors = backend->embed(batch);
+          auto vectors = shared_backend->embed(batch);
+          if (vectors.size() != batch.size()) {
+            cb(buildError(drogon::k500InternalServerError,
+                          "backend_output_mismatch",
+                          "Embedding backend returned incorrect vector count"));
+            return;
+          }
+
+          for (const auto& vector : vectors) {
+            if (vector.size() !=
+                static_cast<std::size_t>(cfg.model_dimension)) {
+              cb(buildError(drogon::k500InternalServerError,
+                            "backend_output_mismatch",
+                            "Embedding backend returned incorrect vector dimension"));
+              return;
+            }
+          }
 
           json payload = {
               {"model", cfg.model_name},
               {"dimension", cfg.model_dimension},
-              {"backend", backend->backendName()},
+              {"backend", shared_backend->backendName()},
               {"vectors", vectors},
           };
           cb(buildJsonResponse(payload, drogon::k200OK));
-        } catch (const std::exception &ex) {
+        } catch (const json::parse_error &ex) {
           cb(buildError(drogon::k400BadRequest, "invalid_json", ex.what()));
+        } catch (const std::exception &ex) {
+          cb(buildError(drogon::k500InternalServerError,
+                        "embedding_failure", ex.what()));
         }
       },
       {drogon::Post});
