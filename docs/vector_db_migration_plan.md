@@ -1362,7 +1362,7 @@ Current implementation details for Phase 8 progress:
 - [x] Implement health state reporting only after successful warmup
 - [x] Add smoke tests for `/health`
 - [x] Add smoke tests for `/embed`
-- [ ] Add load testing or benchmark pass for representative batch sizes
+- [x] Add load testing or benchmark pass for representative batch sizes
 
 Current implementation details for Phase 10 progress:
 
@@ -1387,6 +1387,10 @@ Current implementation details for Phase 10 progress:
   - reads `REQUEST_TIMEOUT_MS` from environment (default `30000`)
   - returns structured timeout error (`code=request_timeout`) with HTTP `504` when backend embed execution exceeds timeout budget
   - `docker-compose.yaml` now wires `REQUEST_TIMEOUT_MS` to `EMBEDDING_REQUEST_TIMEOUT_MS` by default for aligned app/service timeout tuning
+- Added `scripts/embeddings_benchmark.sh` for representative batch-size benchmarking:
+  - configurable `BATCH_SIZES` and `ITERATIONS`
+  - validates healthy service before benchmark runs
+  - reports min/p50/p95/max latency per batch size
 
 ## Phase 11: Application-Side Embedding Client
 

@@ -251,6 +251,12 @@ Embeddings service smoke check (`/health` + `/embed` + oversized batch guard):
 bash scripts/embeddings_smoke.sh
 ```
 
+Embeddings service benchmark check (latency summary across representative batch sizes):
+
+```bash
+bash scripts/embeddings_benchmark.sh
+```
+
 ## Project Structure
 
 ```
