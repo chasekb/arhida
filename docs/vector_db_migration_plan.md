@@ -1147,7 +1147,7 @@ This section breaks the migration into checkable implementation phases.
 - [x] Add environment variables for accelerator selection (`cpu`, `cuda`, `mlx`)
 - [x] Add startup ordering / dependency configuration for `app -> embeddings -> qdrant`
 - [x] Ensure services share the correct internal network
-- [ ] Decide whether to remove or temporarily keep the external PostgreSQL network dependency
+- [x] Decide whether to remove or temporarily keep the external PostgreSQL network dependency
 - [ ] Document example compose overrides for:
   - [x] CPU-only deployment
   - [x] CUDA-enabled deployment
@@ -1162,7 +1162,7 @@ This section breaks the migration into checkable implementation phases.
 - [x] Add config for `VECTOR_SIZE`
 - [x] Add config for embedding timeout / retry controls
 - [x] Add config for accelerator/backend awareness if needed by the app
-- [ ] Preserve temporary PostgreSQL settings for migration tooling if still needed
+- [x] Preserve temporary PostgreSQL settings for migration tooling if still needed
 - [x] Update `.env.example` with new vector/embedding configuration
 - [x] Remove or de-emphasize Postgres-only runtime guidance in docs/examples
 
