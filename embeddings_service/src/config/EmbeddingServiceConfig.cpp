@@ -1,6 +1,9 @@
 #include "config/EmbeddingServiceConfig.h"
 
+#include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <stdexcept>
 
 namespace {
 std::string getEnvString(const char* key, const std::string& default_value) {
@@ -19,6 +22,34 @@ int getEnvInt(const char* key, int default_value) {
     return default_value;
   }
 }
+
+bool getEnvBool(const char* key, bool default_value) {
+  const char* value = std::getenv(key);
+  if (!value) {
+    return default_value;
+  }
+
+  std::string normalized(value);
+  for (char& ch : normalized) {
+    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+
+  if (normalized == "1" || normalized == "true" || normalized == "yes") {
+    return true;
+  }
+  if (normalized == "0" || normalized == "false" || normalized == "no") {
+    return false;
+  }
+  return default_value;
+}
+
+bool fileExists(const std::string& path) {
+  return std::filesystem::exists(path) && std::filesystem::is_regular_file(path);
+}
+
+bool directoryExists(const std::string& path) {
+  return std::filesystem::exists(path) && std::filesystem::is_directory(path);
+}
 } // namespace
 
 EmbeddingServiceConfig EmbeddingServiceConfig::fromEnvironment() {
@@ -26,16 +57,30 @@ EmbeddingServiceConfig EmbeddingServiceConfig::fromEnvironment() {
   cfg.host = getEnvString("SERVICE_HOST", cfg.host);
   cfg.port = getEnvInt("SERVICE_PORT", cfg.port);
   cfg.model_name = getEnvString("MODEL_NAME", cfg.model_name);
+  cfg.model_path = getEnvString("MODEL_PATH", cfg.model_path);
+  cfg.tokenizer_path = getEnvString("TOKENIZER_PATH", cfg.tokenizer_path);
   cfg.model_dimension = getEnvInt("MODEL_DIMENSION", cfg.model_dimension);
   cfg.max_batch_size = getEnvInt("MAX_BATCH_SIZE", cfg.max_batch_size);
   cfg.device = getEnvString("DEVICE", cfg.device);
   cfg.accelerator_backend =
       getEnvString("ACCELERATOR_BACKEND", cfg.accelerator_backend);
   cfg.service_version = getEnvString("SERVICE_VERSION", cfg.service_version);
+  cfg.strict_model_validation =
+      getEnvBool("STRICT_MODEL_VALIDATION", cfg.strict_model_validation);
 
-  // Phase 6 scaffolding defaults: startup contract exists, model wiring comes
-  // in later phases.
-  cfg.model_loaded = true;
-  cfg.tokenizer_loaded = true;
+  cfg.model_loaded = fileExists(cfg.model_path);
+  cfg.tokenizer_loaded = directoryExists(cfg.tokenizer_path) &&
+                         fileExists(cfg.tokenizer_path + "/tokenizer.json");
+
+  if (cfg.strict_model_validation && !cfg.model_loaded) {
+    throw std::runtime_error("Model artifact not found at: " + cfg.model_path);
+  }
+
+  if (cfg.strict_model_validation && !cfg.tokenizer_loaded) {
+    throw std::runtime_error(
+        "Tokenizer assets not found at: " + cfg.tokenizer_path +
+        " (expected tokenizer.json)");
+  }
+
   return cfg;
 }

@@ -1270,10 +1270,20 @@ Current implementation details for Phase 6 foundation:
 - [ ] Choose the initial exported model artifact format
 - [ ] Prepare ONNX model files for the selected embedding model
 - [ ] Prepare tokenizer assets for the selected embedding model
-- [ ] Define mounted model directory layout under `/models`
-- [ ] Implement startup validation for required model/tokenizer files
+- [x] Define mounted model directory layout under `/models`
+- [x] Implement startup validation for required model/tokenizer files
 - [ ] Document artifact preparation and placement steps
 - [ ] Decide how model upgrades/rollbacks will be handled operationally
+
+Current implementation details for Phase 7 progress:
+
+- `EmbeddingServiceConfig` now includes explicit artifact paths:
+  - `MODEL_PATH` (default: `/models/bge-small-en-v1.5/model.onnx`)
+  - `TOKENIZER_PATH` (default: `/models/bge-small-en-v1.5/tokenizer`)
+- Startup config loading validates filesystem requirements:
+  - model file existence check for `MODEL_PATH`
+  - tokenizer directory + `tokenizer.json` existence checks for `TOKENIZER_PATH`
+- Validation behavior is controlled by `STRICT_MODEL_VALIDATION` (default `true`) and fails fast with clear startup errors when required artifacts are missing.
 
 ## Phase 8: C++ Inference Engine Implementation
 
