@@ -1238,16 +1238,32 @@ Current test coverage for Phase 5 text-building behavior:
 
 ## Phase 6: C++ Embeddings Service Foundation
 
-- [ ] Create a dedicated embeddings-service project structure
-- [ ] Add `CMakeLists.txt` for the embeddings service
-- [ ] Add HTTP server dependency (recommended: Drogon)
-- [ ] Add ONNX Runtime dependency
-- [ ] Add `nlohmann/json` and `spdlog`
-- [ ] Define service config loading
-- [ ] Define `/health` endpoint contract
-- [ ] Define `/embed` endpoint contract
-- [ ] Define structured error response format
-- [ ] Add startup logging and service versioning
+- [x] Create a dedicated embeddings-service project structure
+- [x] Add `CMakeLists.txt` for the embeddings service
+- [x] Add HTTP server dependency (recommended: Drogon)
+- [x] Add ONNX Runtime dependency
+- [x] Add `nlohmann/json` and `spdlog`
+- [x] Define service config loading
+- [x] Define `/health` endpoint contract
+- [x] Define `/embed` endpoint contract
+- [x] Define structured error response format
+- [x] Add startup logging and service versioning
+
+Current implementation details for Phase 6 foundation:
+
+- Added `embeddings_service/` scaffold with:
+  - `CMakeLists.txt`
+  - `include/config/EmbeddingServiceConfig.h`
+  - `src/config/EmbeddingServiceConfig.cpp`
+  - `include/server/HttpServer.h`
+  - `src/server/HttpServer.cpp`
+  - `src/main.cpp`
+- Drogon-based HTTP service now exposes:
+  - `GET /health` with service/version/model/dimension/device/backend readiness metadata
+  - `POST /embed` request validation (`inputs` array, string-only items, max batch size)
+  - Structured JSON errors for invalid request, oversized batch, invalid input type, and invalid JSON
+- `CMakeLists.txt` links Drogon + `nlohmann/json` + `spdlog` and includes ONNX Runtime as an interface dependency for follow-on inference phases.
+- `/embed` currently returns deterministic placeholder vectors (zero-filled with configured dimension) as a Phase 6 contract scaffold; real model inference wiring remains planned for Phase 8.
 
 ## Phase 7: Model Artifact and Tokenizer Management
 
