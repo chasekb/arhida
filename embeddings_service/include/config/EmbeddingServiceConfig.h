@@ -10,6 +10,7 @@ struct EmbeddingServiceConfig {
   std::string tokenizer_path = "/models/bge-small-en-v1.5/tokenizer";
   int model_dimension = 384;
   int max_batch_size = 64;
+  int request_timeout_ms = 30000;
   std::string device = "cpu";
   std::string accelerator_backend = "onnx";
   std::string service_version = "0.1.0";

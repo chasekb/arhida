@@ -7,7 +7,9 @@
 #include <spdlog/spdlog.h>
 
 #include <chrono>
+#include <future>
 #include <memory>
+#include <thread>
 
 namespace {
 using json = nlohmann::json;
@@ -122,7 +124,30 @@ void HttpServer::run() const {
             batch.push_back(item.get<std::string>());
           }
 
-          auto vectors = shared_backend->embed(batch);
+          std::promise<std::vector<std::vector<float>>> embed_promise;
+          auto embed_future = embed_promise.get_future();
+          std::thread([shared_backend, batch,
+                       promise = std::move(embed_promise)]() mutable {
+            try {
+              promise.set_value(shared_backend->embed(batch));
+            } catch (...) {
+              promise.set_exception(std::current_exception());
+            }
+          }).detach();
+
+          if (embed_future.wait_for(
+                  std::chrono::milliseconds(cfg.request_timeout_ms)) !=
+              std::future_status::ready) {
+            spdlog::error(
+                "embed request failed code=request_timeout batch_size={} backend={} timeout_ms={} duration_ms={}",
+                batch.size(), shared_backend->backendName(),
+                cfg.request_timeout_ms, elapsedMs());
+            cb(buildError(drogon::k504GatewayTimeout, "request_timeout",
+                          "Embedding request timed out"));
+            return;
+          }
+
+          auto vectors = embed_future.get();
           if (vectors.size() != batch.size()) {
             spdlog::error(
                 "embed request failed code=backend_output_mismatch reason=vector_count expected={} actual={} backend={} duration_ms={}",

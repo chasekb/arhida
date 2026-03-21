@@ -94,6 +94,7 @@ services:
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
       - ACCELERATOR_BACKEND=${ACCELERATOR_BACKEND:-onnx}
       - SERVICE_PORT=${SERVICE_PORT:-8000}
+      - REQUEST_TIMEOUT_MS=${REQUEST_TIMEOUT_MS:-${EMBEDDING_REQUEST_TIMEOUT_MS:-30000}}
     volumes:
       - model-files:/models:ro
     networks:

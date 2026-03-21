@@ -61,6 +61,8 @@ EmbeddingServiceConfig EmbeddingServiceConfig::fromEnvironment() {
   cfg.tokenizer_path = getEnvString("TOKENIZER_PATH", cfg.tokenizer_path);
   cfg.model_dimension = getEnvInt("MODEL_DIMENSION", cfg.model_dimension);
   cfg.max_batch_size = getEnvInt("MAX_BATCH_SIZE", cfg.max_batch_size);
+  cfg.request_timeout_ms =
+      getEnvInt("REQUEST_TIMEOUT_MS", cfg.request_timeout_ms);
   cfg.device = getEnvString("DEVICE", cfg.device);
   cfg.accelerator_backend =
       getEnvString("ACCELERATOR_BACKEND", cfg.accelerator_backend);

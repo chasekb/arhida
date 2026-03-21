@@ -1356,7 +1356,7 @@ Current implementation details for Phase 8 progress:
 
 - [x] Implement request validation for `/embed`
 - [x] Implement batch-size limits
-- [ ] Implement timeout behavior
+- [x] Implement timeout behavior
 - [x] Implement structured JSON error responses
 - [x] Implement latency and batch-size logging
 - [x] Implement health state reporting only after successful warmup
@@ -1383,6 +1383,10 @@ Current implementation details for Phase 10 progress:
   - successful batch size and backend with request duration (`duration_ms`)
   - structured rejection logs for validation failures (`invalid_request`, `invalid_json`, `invalid_input_type`, `batch_too_large`)
   - backend failure logs with output-shape mismatch context and latency
+- `/embed` now enforces configurable request timeout behavior:
+  - reads `REQUEST_TIMEOUT_MS` from environment (default `30000`)
+  - returns structured timeout error (`code=request_timeout`) with HTTP `504` when backend embed execution exceeds timeout budget
+  - `docker-compose.yaml` now wires `REQUEST_TIMEOUT_MS` to `EMBEDDING_REQUEST_TIMEOUT_MS` by default for aligned app/service timeout tuning
 
 ## Phase 11: Application-Side Embedding Client
 
