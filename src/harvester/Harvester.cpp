@@ -40,6 +40,7 @@ void Harvester::ensureStorageInitialized() {
 
   if (config.getVectorDbProvider() == "qdrant") {
     db_.createTable(std::string(), config.getQdrantCollection());
+    db_.validateStorageConfiguration();
     return;
   }
 
@@ -48,6 +49,7 @@ void Harvester::ensureStorageInitialized() {
   db_.createSchema(schema);
   db_.createTable(schema, table);
   db_.createIndexes(schema, table);
+  db_.validateStorageConfiguration();
 }
 
 int Harvester::harvestRecent(const std::vector<std::string> &set_specs) {

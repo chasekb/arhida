@@ -1171,7 +1171,7 @@ This section breaks the migration into checkable implementation phases.
   - [x] upsert record
   - [x] collection/index setup
   - [x] missing-date lookup / checkpoint queries
-  - [ ] any required stats or validation helpers
+  - [x] any required stats or validation helpers
 
 ## Phase 4: Qdrant Storage Implementation
 
@@ -1179,7 +1179,7 @@ This section breaks the migration into checkable implementation phases.
 - [x] Implement Qdrant connection/bootstrap logic
 - [x] Implement collection existence checks
 - [x] Implement collection creation with correct dimension and distance metric
-- [ ] Implement id generation from `header_identifier`
+- [x] Implement id generation from `header_identifier`
 - [x] Implement point upsert logic
 - [x] Implement payload serialization for all persisted metadata fields
 - [x] Implement filtering/query support needed by backfill logic
@@ -1353,7 +1353,7 @@ This section breaks the migration into checkable implementation phases.
 ## Phase 16: Documentation and Operations
 
 - [x] Update `README.md` for the new architecture
-- [ ] Update `.env.example`
+- [x] Update `.env.example`
 - [x] Update Docker usage instructions
 - [x] Document model artifact preparation and volume mounting
 - [x] Document CPU, CUDA, and MLX deployment modes

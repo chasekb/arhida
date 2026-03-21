@@ -21,6 +21,7 @@ public:
     virtual void createSchema(const std::string& schema_name) = 0;
     virtual void createTable(const std::string& schema_name, const std::string& table_name) = 0;
     virtual void createIndexes(const std::string& schema_name, const std::string& table_name) = 0;
+    virtual void validateStorageConfiguration() const = 0;
 
     virtual void upsertRecord(const Record& record,
                               const std::vector<float>& embedding) = 0;

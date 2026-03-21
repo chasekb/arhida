@@ -69,6 +69,10 @@ void QdrantStorage::createIndexes(const std::string &schema_name,
                 schema_name, table_name);
 }
 
+void QdrantStorage::validateStorageConfiguration() const {
+  validateCollectionConfiguration();
+}
+
 void QdrantStorage::upsertRecord(const Record &record,
                                  const std::vector<float> &embedding) {
   Config &config = Config::instance();

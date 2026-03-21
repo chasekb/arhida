@@ -134,6 +134,41 @@ void Database::createIndexes(const std::string &schema_name,
   spdlog::info("Created indexes for table: {}.{}", schema_name, table_name);
 }
 
+void Database::validateStorageConfiguration() const {
+  if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
+    throw std::runtime_error(
+        "PostgreSQL storage validation failed: connection is not available");
+  }
+
+  Config &config = Config::instance();
+  std::string schema = config.getPostgresSchema();
+  std::string table = config.getPostgresTable();
+
+  const std::string validation_query =
+      "SELECT to_regclass('" + schema + "." + table + "')";
+
+  PGresult *res = PQexec(conn_, validation_query.c_str());
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    std::string error = PQerrorMessage(conn_);
+    PQclear(res);
+    throw std::runtime_error("PostgreSQL storage validation query failed: " +
+                             error);
+  }
+
+  const bool relation_found =
+      PQntuples(res) == 1 && !PQgetisnull(res, 0, 0) &&
+      std::strlen(PQgetvalue(res, 0, 0)) > 0;
+  PQclear(res);
+
+  if (!relation_found) {
+    throw std::runtime_error("PostgreSQL storage validation failed: expected " +
+                             schema + "." + table + " to exist");
+  }
+
+  spdlog::info("Validated PostgreSQL storage configuration for {}.{}", schema,
+               table);
+}
+
 void Database::upsertRecord(const Record &record,
                             const std::vector<float> &embedding) {
   Config &config = Config::instance();
