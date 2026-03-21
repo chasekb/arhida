@@ -1301,7 +1301,7 @@ Current implementation details for Phase 7 progress:
 - [ ] Implement vector normalization strategy
 - [x] Implement runtime warmup inference
 - [ ] Implement tokenizer integration
-- [ ] Add tests or verification for returned embedding dimension and stability
+- [x] Add tests or verification for returned embedding dimension and stability
 
 Current implementation details for Phase 8 progress:
 
@@ -1328,6 +1328,8 @@ Current implementation details for Phase 8 progress:
 - `/embed` now enforces backend output shape checks at runtime:
   - vector count must match request input count
   - each returned vector must match configured model dimension
+- `scripts/embeddings_smoke.sh` now verifies deterministic backend behavior by asserting
+  identical inputs return identical vectors in the same response.
 
 ## Phase 9: Accelerator Support
 

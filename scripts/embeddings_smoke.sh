@@ -58,6 +58,26 @@ for i, vector in enumerate(vectors):
 print("[smoke] embed response vector count/dim verified")
 PY
 
+DETERMINISM_RESPONSE="$(curl -fsS -X POST "${EMBEDDINGS_URL}/embed" \
+  -H "Content-Type: application/json" \
+  -d '{"inputs": ["determinism probe", "determinism probe"]}')"
+
+python3 - <<'PY' <<<"${DETERMINISM_RESPONSE}"
+import json
+import sys
+
+payload = json.loads(sys.stdin.read())
+vectors = payload.get("vectors", [])
+
+if len(vectors) != 2:
+    raise SystemExit(f"determinism verification failed: expected 2 vectors, got {len(vectors)}")
+
+if vectors[0] != vectors[1]:
+    raise SystemExit("determinism verification failed: identical inputs yielded different vectors")
+
+print("[smoke] deterministic output verified for identical inputs")
+PY
+
 OVERSIZE_BODY="$(python3 - <<'PY'
 import json
 import os
