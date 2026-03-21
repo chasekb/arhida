@@ -8,6 +8,7 @@
 #include "config/Config.h"
 #include "embedding/EmbeddingTextBuilder.h"
 #include "utils/Logger.h"
+#include <algorithm>
 #include <chrono>
 #include <sstream>
 #include <thread>
@@ -133,7 +134,8 @@ int Harvester::harvestBackfill(const std::string &start_date,
                                const std::vector<std::string> &set_specs) {
   Config &config = Config::instance();
 
-  std::string start = start_date.empty() ? "2007-01-01" : start_date;
+  std::string start =
+      start_date.empty() ? config.getBackfillStartDate() : start_date;
   
   // Use current date as default end date instead of hardcoded 2026-01-01
   std::string end;
@@ -173,8 +175,9 @@ int Harvester::harvestBackfill(const std::string &start_date,
     spdlog::info("Found {} missing dates for {}", missing_dates.size(),
                  set_spec);
 
-    // Process in chunks of 7 days
-    const size_t chunk_size = 7;
+    // Process in configurable chunks
+    const size_t chunk_size =
+        static_cast<size_t>(std::max(1, config.getBackfillChunkSize()));
     for (size_t i = 0; i < missing_dates.size(); i += chunk_size) {
       size_t end_idx = std::min(i + chunk_size, missing_dates.size());
 
@@ -183,7 +186,6 @@ int Harvester::harvestBackfill(const std::string &start_date,
 
         try {
           // Single day range
-          std::string next_date = date_str; // Would need to add 1 day
           int records = harvestSetSpec(set_spec, date_str, date_str);
 
           if (records > 0) {

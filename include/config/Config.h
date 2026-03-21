@@ -51,6 +51,8 @@ public:
     int getBatchSize() const { return batch_size_; }
     int getMaxRetries() const { return max_retries_; }
     int getRetryAfter() const { return retry_after_; }
+    int getBackfillChunkSize() const { return backfill_chunk_size_; }
+    std::string getBackfillStartDate() const { return backfill_start_date_; }
     
     // Docker configuration
     std::string getDockerPostgresHost() const { return docker_host_; }
@@ -101,6 +103,8 @@ private:
     int batch_size_;
     int max_retries_;
     int retry_after_;
+    int backfill_chunk_size_;
+    std::string backfill_start_date_;
     
     // Docker settings
     std::string docker_host_;

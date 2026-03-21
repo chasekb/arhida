@@ -1043,6 +1043,13 @@ Local inference introduces throughput constraints that affect migration and back
 - backfill should rate-limit both arXiv requests and embedding requests independently
 - large historical loads may need a separate migration mode from normal daily harvesting
 
+Current decision for runtime backfill state tracking:
+
+- **Normal harvester backfill state is derived from Qdrant payloads**
+  (`header_datestamp` + `header_setSpecs`) via `getMissingDates()` filters.
+- **A separate checkpoint mechanism is deferred to the dedicated historical
+  migration utility** (Phase 14) where long-running resume semantics matter most.
+
 ### Recommended Migration Behavior
 
 - read historical records from PostgreSQL in chunks
@@ -1287,7 +1294,7 @@ This section breaks the migration into checkable implementation phases.
 - [x] Insert embedding-generation step into record ingestion flow
 - [x] Persist vectors plus payload for harvested records
 - [x] Refactor `getMissingDates()` behavior to work with Qdrant filters or checkpoints
-- [ ] Decide whether backfill state lives entirely in Qdrant payloads or in a separate checkpoint mechanism
+- [x] Decide whether backfill state lives entirely in Qdrant payloads or in a separate checkpoint mechanism
 - [ ] Ensure recent harvest mode still works end to end
 - [ ] Ensure backfill mode still works end to end
 - [x] Add logging around embedding failures vs storage failures

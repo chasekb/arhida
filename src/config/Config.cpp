@@ -92,6 +92,8 @@ void Config::load() {
   batch_size_ = std::stoi(getEnv("ARXIV_BATCH_SIZE", "2000"));
   max_retries_ = std::stoi(getEnv("ARXIV_MAX_RETRIES", "3"));
   retry_after_ = std::stoi(getEnv("ARXIV_RETRY_AFTER", "5"));
+  backfill_chunk_size_ = std::stoi(getEnv("BACKFILL_CHUNK_SIZE", "7"));
+  backfill_start_date_ = getEnv("BACKFILL_START_DATE", "2007-01-01");
 
   // Docker settings
   docker_host_ = getEnv("DOCKER_POSTGRES_HOST", "db-local");
