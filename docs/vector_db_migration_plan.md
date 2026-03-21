@@ -1354,11 +1354,11 @@ Current implementation details for Phase 8 progress:
 
 ## Phase 10: Embeddings-Service HTTP and Operational Behavior
 
-- [ ] Implement request validation for `/embed`
-- [ ] Implement batch-size limits
+- [x] Implement request validation for `/embed`
+- [x] Implement batch-size limits
 - [ ] Implement timeout behavior
 - [x] Implement structured JSON error responses
-- [ ] Implement latency and batch-size logging
+- [x] Implement latency and batch-size logging
 - [x] Implement health state reporting only after successful warmup
 - [x] Add smoke tests for `/health`
 - [x] Add smoke tests for `/embed`
@@ -1379,6 +1379,10 @@ Current implementation details for Phase 10 progress:
   - verifies `/embed` response count/dimension alignment
   - verifies oversized batch error path returns HTTP `400` + `batch_too_large`
 - `README.md` now includes usage guidance for the embeddings smoke check script.
+- `/embed` handler now emits operational request logs including:
+  - successful batch size and backend with request duration (`duration_ms`)
+  - structured rejection logs for validation failures (`invalid_request`, `invalid_json`, `invalid_input_type`, `batch_too_large`)
+  - backend failure logs with output-shape mismatch context and latency
 
 ## Phase 11: Application-Side Embedding Client
 
