@@ -71,6 +71,19 @@ void QdrantStorage::createIndexes(const std::string &schema_name,
 
 void QdrantStorage::upsertRecord(const Record &record,
                                  const std::vector<float> &embedding) {
+  Config &config = Config::instance();
+
+  if (embedding.empty()) {
+    throw std::runtime_error("Qdrant upsert requires a non-empty embedding");
+  }
+
+  if (static_cast<int>(embedding.size()) != config.getVectorSize()) {
+    throw std::runtime_error(
+        "Qdrant embedding dimension mismatch for upsert: expected " +
+        std::to_string(config.getVectorSize()) + ", got " +
+        std::to_string(embedding.size()));
+  }
+
   json payload = {
       {"header_identifier", record.header_identifier},
       {"header_datestamp", record.header_datestamp},

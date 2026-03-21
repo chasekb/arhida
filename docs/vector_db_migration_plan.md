@@ -1180,8 +1180,8 @@ This section breaks the migration into checkable implementation phases.
 - [x] Implement collection existence checks
 - [x] Implement collection creation with correct dimension and distance metric
 - [ ] Implement id generation from `header_identifier`
-- [ ] Implement point upsert logic
-- [ ] Implement payload serialization for all persisted metadata fields
+- [x] Implement point upsert logic
+- [x] Implement payload serialization for all persisted metadata fields
 - [x] Implement filtering/query support needed by backfill logic
 - [x] Add startup validation that collection dimension matches embedding dimension
 - [x] Add logging and error handling for Qdrant request failures
@@ -1282,15 +1282,15 @@ This section breaks the migration into checkable implementation phases.
 
 ## Phase 12: Harvester Refactor
 
-- [ ] Replace relational table initialization with vector-collection initialization
+- [x] Replace relational table initialization with vector-collection initialization
 - [x] Replace SQL upsert assumptions with Qdrant upsert flow
 - [x] Insert embedding-generation step into record ingestion flow
-- [ ] Persist vectors plus payload for harvested records
+- [x] Persist vectors plus payload for harvested records
 - [x] Refactor `getMissingDates()` behavior to work with Qdrant filters or checkpoints
 - [ ] Decide whether backfill state lives entirely in Qdrant payloads or in a separate checkpoint mechanism
 - [ ] Ensure recent harvest mode still works end to end
 - [ ] Ensure backfill mode still works end to end
-- [ ] Add logging around embedding failures vs storage failures
+- [x] Add logging around embedding failures vs storage failures
 
 ## Phase 13: Expanded Metadata Harvesting (Optional but Recommended)
 

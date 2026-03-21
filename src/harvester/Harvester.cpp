@@ -35,11 +35,16 @@ Harvester::~Harvester() {
   }
 }
 
-void Harvester::ensureTableExists() {
+void Harvester::ensureStorageInitialized() {
   Config &config = Config::instance();
+
+  if (config.getVectorDbProvider() == "qdrant") {
+    db_.createTable(std::string(), config.getQdrantCollection());
+    return;
+  }
+
   std::string schema = config.getPostgresSchema();
   std::string table = config.getPostgresTable();
-
   db_.createSchema(schema);
   db_.createTable(schema, table);
   db_.createIndexes(schema, table);
@@ -74,8 +79,8 @@ int Harvester::harvestRecent(const std::vector<std::string> &set_specs) {
 
   spdlog::info("Recent harvest from {} to {}", from_date, until_date);
 
-  // Ensure table exists
-  ensureTableExists();
+  // Ensure storage backend is initialized
+  ensureStorageInitialized();
 
   int total_records = 0;
   int successful_sets = 0;
@@ -146,8 +151,8 @@ int Harvester::harvestBackfill(const std::string &start_date,
 
   spdlog::info("Backfill from {} to {}", start, end);
 
-  // Ensure table exists
-  ensureTableExists();
+  // Ensure storage backend is initialized
+  ensureStorageInitialized();
 
   int total_records = 0;
 
@@ -232,10 +237,10 @@ void Harvester::insertRecords(const std::vector<Record> &records,
   int processed = 0;
 
   for (const auto &record : records) {
-    try {
-      std::vector<float> embedding;
+    std::vector<float> embedding;
 
-      if (embedding_client_) {
+    if (embedding_client_) {
+      try {
         std::string embedding_text = EmbeddingTextBuilder::build(record);
         auto vectors = embedding_client_->embed({embedding_text});
         if (vectors.empty()) {
@@ -243,21 +248,24 @@ void Harvester::insertRecords(const std::vector<Record> &records,
               "Embeddings service returned no vectors for harvested record");
         }
         embedding = std::move(vectors.front());
+      } catch (const std::exception &e) {
+        spdlog::error("Embedding generation failed for record {}: {}",
+                      record.header_identifier, e.what());
+        continue;
       }
+    }
 
+    try {
       db_.upsertRecord(record, embedding);
-
       processed++;
 
       if (processed % 100 == 0) {
         spdlog::info("Processed {} records in current batch for {}", processed,
                      set_spec);
       }
-
     } catch (const std::exception &e) {
-      spdlog::error(
-          "Error processing record {} for persistence/embedding: {}",
-          record.header_identifier, e.what());
+      spdlog::error("Storage upsert failed for record {}: {}",
+                    record.header_identifier, e.what());
     }
   }
 
