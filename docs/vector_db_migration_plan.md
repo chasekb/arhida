@@ -1155,7 +1155,7 @@ This section breaks the migration into checkable implementation phases.
 - [x] Add startup ordering / dependency configuration for `app -> embeddings -> qdrant`
 - [x] Ensure services share the correct internal network
 - [x] Decide whether to remove or temporarily keep the external PostgreSQL network dependency
-- [ ] Document example compose overrides for:
+- [x] Document example compose overrides for:
   - [x] CPU-only deployment
   - [x] CUDA-enabled deployment
   - [x] Apple Silicon / MLX development
@@ -1178,14 +1178,23 @@ This section breaks the migration into checkable implementation phases.
 - [x] Define a storage abstraction interface (for example `StorageEngine`)
 - [x] Refactor harvester code to depend on the abstraction rather than `Database`
 - [x] Add initial runtime backend selection between PostgreSQL and Qdrant
-- [ ] Decide whether the existing Postgres implementation becomes `PostgresStorage` or remains migration-only
+- [x] Decide whether the existing Postgres implementation becomes `PostgresStorage` or remains migration-only
 - [x] Separate schema/table responsibilities from general storage orchestration
-- [ ] Define abstraction methods for:
+- [x] Define abstraction methods for:
   - [x] connect / initialize
   - [x] upsert record
   - [x] collection/index setup
   - [x] missing-date lookup / checkpoint queries
   - [x] any required stats or validation helpers
+
+Current decision for PostgreSQL implementation role (Phase 3):
+
+- Keep the current `Database` implementation as the temporary PostgreSQL-backed
+  `StorageEngine` implementation during migration.
+- Treat it as **migration-compatibility storage** while Qdrant remains the
+  default runtime backend.
+- Re-evaluate a full rename/split to `PostgresStorage` during cleanup/cutover
+  once Postgres runtime dependence is removed.
 
 ## Phase 4: Qdrant Storage Implementation
 
