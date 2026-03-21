@@ -1009,6 +1009,13 @@ Description: <abstract>
 
 This format should be versioned conceptually so future changes do not silently alter retrieval behavior.
 
+Current decision for additional embedding metadata (Phase 5):
+
+- **Defer additional metadata fields for now** and keep the canonical embedding input
+  limited to `title + subject + description`.
+- Revisit potential inclusion of `creator`, `date`, `type`, or identifier-derived context
+  under Phase 13 once expanded metadata harvesting is finalized.
+
 ---
 
 ## Qdrant Requirements for Local Embeddings
@@ -1200,7 +1207,7 @@ This section breaks the migration into checkable implementation phases.
 - [x] Define the canonical text layout for embeddings
 - [x] Normalize whitespace and field ordering deterministically
 - [x] Handle missing title/subject/abstract values consistently
-- [ ] Decide whether additional metadata should be included in the embedding text now or later
+- [x] Decide whether additional metadata should be included in the embedding text now or later
 - [x] Version the embedding text format conceptually in docs/code comments
 - [ ] Add tests for text-building behavior
 
