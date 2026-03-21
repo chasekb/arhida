@@ -24,4 +24,8 @@ public:
 
     virtual void upsertRecord(const Record& record,
                               const std::vector<float>& embedding) = 0;
+
+    virtual std::vector<std::string> getMissingDates(const std::string& start_date,
+                                                     const std::string& end_date,
+                                                     const std::string& set_spec) = 0;
 };

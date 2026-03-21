@@ -1168,9 +1168,9 @@ This section breaks the migration into checkable implementation phases.
 - [ ] Separate schema/table responsibilities from general storage orchestration
 - [ ] Define abstraction methods for:
   - [x] connect / initialize
-  - [ ] upsert record
+  - [x] upsert record
   - [x] collection/index setup
-  - [ ] missing-date lookup / checkpoint queries
+  - [x] missing-date lookup / checkpoint queries
   - [ ] any required stats or validation helpers
 
 ## Phase 4: Qdrant Storage Implementation
@@ -1182,7 +1182,7 @@ This section breaks the migration into checkable implementation phases.
 - [ ] Implement id generation from `header_identifier`
 - [ ] Implement point upsert logic
 - [ ] Implement payload serialization for all persisted metadata fields
-- [ ] Implement filtering/query support needed by backfill logic
+- [x] Implement filtering/query support needed by backfill logic
 - [x] Add startup validation that collection dimension matches embedding dimension
 - [x] Add logging and error handling for Qdrant request failures
 - [ ] Add tests or smoke checks for collection creation and upsert behavior
@@ -1283,10 +1283,10 @@ This section breaks the migration into checkable implementation phases.
 ## Phase 12: Harvester Refactor
 
 - [ ] Replace relational table initialization with vector-collection initialization
-- [ ] Replace SQL upsert assumptions with Qdrant upsert flow
+- [x] Replace SQL upsert assumptions with Qdrant upsert flow
 - [x] Insert embedding-generation step into record ingestion flow
 - [ ] Persist vectors plus payload for harvested records
-- [ ] Refactor `getMissingDates()` behavior to work with Qdrant filters or checkpoints
+- [x] Refactor `getMissingDates()` behavior to work with Qdrant filters or checkpoints
 - [ ] Decide whether backfill state lives entirely in Qdrant payloads or in a separate checkpoint mechanism
 - [ ] Ensure recent harvest mode still works end to end
 - [ ] Ensure backfill mode still works end to end

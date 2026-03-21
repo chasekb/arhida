@@ -9,8 +9,13 @@
 #include "utils/Logger.h"
 #include <curl/curl.h>
 #include <cstdint>
+#include <ctime>
+#include <iomanip>
 #include <nlohmann/json.hpp>
+#include <set>
+#include <sstream>
 #include <stdexcept>
+#include <utility>
 
 using json = nlohmann::json;
 
@@ -233,4 +238,99 @@ std::uint64_t QdrantStorage::makePointId(const std::string &identifier) const {
   }
 
   return hash;
+}
+
+std::vector<std::string>
+QdrantStorage::getMissingDates(const std::string &start_date,
+                               const std::string &end_date,
+                               const std::string &set_spec) {
+  std::set<std::string> existing_dates;
+
+  json filter = {
+      {"must",
+       json::array({{{"key", "header_setSpecs"},
+                     {"match", {{"any", json::array({set_spec})}}}},
+                    {{"key", "header_datestamp"},
+                     {"range",
+                      {{"gte", start_date + "T00:00:00"},
+                       {"lte", end_date + "T23:59:59"}}}}})}};
+
+  json request_body = {
+      {"filter", filter},
+      {"with_payload", json::array({"header_datestamp"})},
+      {"with_vector", false},
+      {"limit", 256}};
+
+  json offset = nullptr;
+  do {
+    if (!offset.is_null()) {
+      request_body["offset"] = offset;
+    } else {
+      request_body.erase("offset");
+    }
+
+    long response_code = 0;
+    auto response = performRequest(
+        "POST", "/collections/" + collection_name_ + "/points/scroll",
+        request_body.dump(), &response_code);
+
+    if (response_code < 200 || response_code >= 300) {
+      throw std::runtime_error("Qdrant scroll request failed with HTTP status " +
+                               std::to_string(response_code));
+    }
+
+    auto payload = json::parse(response);
+    if (payload.contains("result") && payload["result"].contains("points")) {
+      for (const auto &point : payload["result"]["points"]) {
+        if (!point.contains("payload") ||
+            !point["payload"].contains("header_datestamp")) {
+          continue;
+        }
+
+        std::string datestamp =
+            point["payload"]["header_datestamp"].get<std::string>();
+        if (datestamp.size() >= 10) {
+          existing_dates.insert(datestamp.substr(0, 10));
+        }
+      }
+    }
+
+    offset = nullptr;
+    if (payload.contains("result") &&
+        payload["result"].contains("next_page_offset") &&
+        !payload["result"]["next_page_offset"].is_null()) {
+      offset = payload["result"]["next_page_offset"];
+    }
+  } while (!offset.is_null());
+
+  std::tm start_tm = {};
+  std::tm end_tm = {};
+  std::istringstream start_ss(start_date);
+  std::istringstream end_ss(end_date);
+  start_ss >> std::get_time(&start_tm, "%Y-%m-%d");
+  end_ss >> std::get_time(&end_tm, "%Y-%m-%d");
+
+  if (start_ss.fail() || end_ss.fail()) {
+    throw std::runtime_error("Invalid date format for missing date lookup");
+  }
+
+  std::time_t start_time = std::mktime(&start_tm);
+  std::time_t end_time = std::mktime(&end_tm);
+  if (end_time < start_time) {
+    std::swap(start_time, end_time);
+  }
+
+  std::vector<std::string> missing_dates;
+  for (std::time_t current = start_time; current <= end_time;
+       current += 24 * 3600) {
+    std::tm *current_tm = std::localtime(&current);
+    char date_str[11];
+    strftime(date_str, sizeof(date_str), "%Y-%m-%d", current_tm);
+
+    if (existing_dates.find(date_str) == existing_dates.end()) {
+      missing_dates.emplace_back(date_str);
+    }
+  }
+
+  return missing_dates;
 }
