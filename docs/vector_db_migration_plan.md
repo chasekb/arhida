@@ -1199,7 +1199,16 @@ This section breaks the migration into checkable implementation phases.
 - [x] Implement filtering/query support needed by backfill logic
 - [x] Add startup validation that collection dimension matches embedding dimension
 - [x] Add logging and error handling for Qdrant request failures
-- [ ] Add tests or smoke checks for collection creation and upsert behavior
+- [x] Add tests or smoke checks for collection creation and upsert behavior
+
+Current smoke-check implementation for Phase 4:
+
+- `scripts/qdrant_smoke.sh` validates end-to-end Qdrant collection lifecycle behavior:
+  - health check (`/healthz`)
+  - collection creation with configured vector size
+  - point upsert (vector + payload)
+  - scroll query verification of persisted payload
+  - cleanup via collection delete
 
 ## Phase 5: Embedding Text and Record Preparation
 

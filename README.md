@@ -189,6 +189,12 @@ curl -fsS http://localhost:8000/health
 docker-compose ps
 ```
 
+Qdrant storage smoke check (collection create + upsert + verify + cleanup):
+
+```bash
+bash scripts/qdrant_smoke.sh
+```
+
 ## Project Structure
 
 ```
