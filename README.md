@@ -269,6 +269,12 @@ Embeddings unavailable failure smoke check (verifies app fails fast when embeddi
 bash scripts/embeddings_unavailable_smoke.sh
 ```
 
+Qdrant unavailable failure smoke check (verifies app fails fast when qdrant connectivity fails at startup/storage initialization):
+
+```bash
+bash scripts/qdrant_unavailable_smoke.sh
+```
+
 ## Project Structure
 
 ```
