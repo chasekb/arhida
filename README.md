@@ -263,6 +263,12 @@ App mode smoke check (runs `recent` and `backfill` via compose against qdrant/em
 bash scripts/app_modes_smoke.sh
 ```
 
+Embeddings unavailable failure smoke check (verifies app fails fast when embeddings health check fails at startup):
+
+```bash
+bash scripts/embeddings_unavailable_smoke.sh
+```
+
 ## Project Structure
 
 ```

@@ -1490,11 +1490,19 @@ Current implementation details for remaining Phase 12 mode validation:
 - [ ] Tune batch sizes for app, embeddings service, and Qdrant writes
 
 ### Failure Validation
-- [ ] Verify behavior when embeddings service is unavailable
+- [x] Verify behavior when embeddings service is unavailable
 - [ ] Verify behavior when Qdrant is unavailable
 - [ ] Verify behavior when model artifacts are missing
 - [ ] Verify behavior when accelerator is requested but unavailable
 - [ ] Verify retry behavior under transient failures
+
+Current implementation details for Phase 15 failure validation progress:
+
+- Added `scripts/embeddings_unavailable_smoke.sh` to assert fail-fast startup behavior when embeddings is down:
+  - starts only `qdrant`
+  - explicitly stops `embeddings`
+  - runs app in `recent` mode via compose and expects non-zero exit
+  - asserts startup output contains `Embeddings service health check failed during startup`
 
 ## Phase 16: Documentation and Operations
 
