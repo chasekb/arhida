@@ -275,6 +275,12 @@ Qdrant unavailable failure smoke check (verifies app fails fast when qdrant conn
 bash scripts/qdrant_unavailable_smoke.sh
 ```
 
+Model artifacts missing failure smoke check (verifies embeddings service fails fast when required model/tokenizer assets are missing):
+
+```bash
+bash scripts/model_artifacts_missing_smoke.sh
+```
+
 ## Project Structure
 
 ```

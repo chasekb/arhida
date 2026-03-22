@@ -1492,7 +1492,7 @@ Current implementation details for remaining Phase 12 mode validation:
 ### Failure Validation
 - [x] Verify behavior when embeddings service is unavailable
 - [x] Verify behavior when Qdrant is unavailable
-- [ ] Verify behavior when model artifacts are missing
+- [x] Verify behavior when model artifacts are missing
 - [ ] Verify behavior when accelerator is requested but unavailable
 - [ ] Verify retry behavior under transient failures
 
@@ -1508,6 +1508,10 @@ Current implementation details for Phase 15 failure validation progress:
   - explicitly stops `qdrant`
   - runs app in `recent` mode via compose and expects non-zero exit
   - asserts startup output contains `Qdrant request failed`
+- Added `scripts/model_artifacts_missing_smoke.sh` to assert embeddings service startup failure when required artifacts are absent:
+  - runs embeddings service with `STRICT_MODEL_VALIDATION=true`
+  - overrides `MODEL_PATH` and `TOKENIZER_PATH` to intentionally missing paths
+  - expects non-zero startup exit and asserts output contains `Model artifact not found at:`
 
 ## Phase 16: Documentation and Operations
 
