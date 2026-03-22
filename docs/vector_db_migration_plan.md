@@ -1422,9 +1422,17 @@ Current test coverage for Phase 11 embedding client behavior:
 - [x] Persist vectors plus payload for harvested records
 - [x] Refactor `getMissingDates()` behavior to work with Qdrant filters or checkpoints
 - [x] Decide whether backfill state lives entirely in Qdrant payloads or in a separate checkpoint mechanism
-- [ ] Ensure recent harvest mode still works end to end
-- [ ] Ensure backfill mode still works end to end
+- [x] Ensure recent harvest mode still works end to end
+- [x] Ensure backfill mode still works end to end
 - [x] Add logging around embedding failures vs storage failures
+
+Current implementation details for remaining Phase 12 mode validation:
+
+- Added `scripts/app_modes_smoke.sh` for compose-backed runtime verification that:
+  - waits for `qdrant` and `embeddings` health endpoints
+  - executes app `recent` mode through `docker-compose run --rm app`
+  - executes app `backfill` mode with configurable date range and set specs
+- `README.md` now includes usage guidance for this app-mode smoke script.
 
 ## Phase 13: Expanded Metadata Harvesting (Optional but Recommended)
 

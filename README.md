@@ -257,6 +257,12 @@ Embeddings service benchmark check (latency summary across representative batch 
 bash scripts/embeddings_benchmark.sh
 ```
 
+App mode smoke check (runs `recent` and `backfill` via compose against qdrant/embeddings):
+
+```bash
+bash scripts/app_modes_smoke.sh
+```
+
 ## Project Structure
 
 ```
