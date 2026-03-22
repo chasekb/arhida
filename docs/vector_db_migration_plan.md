@@ -1494,7 +1494,7 @@ Current implementation details for remaining Phase 12 mode validation:
 - [x] Verify behavior when Qdrant is unavailable
 - [x] Verify behavior when model artifacts are missing
 - [ ] Verify behavior when accelerator is requested but unavailable
-- [ ] Verify retry behavior under transient failures
+- [x] Verify retry behavior under transient failures
 
 Current implementation details for Phase 15 failure validation progress:
 
@@ -1512,6 +1512,11 @@ Current implementation details for Phase 15 failure validation progress:
   - runs embeddings service with `STRICT_MODEL_VALIDATION=true`
   - overrides `MODEL_PATH` and `TOKENIZER_PATH` to intentionally missing paths
   - expects non-zero startup exit and asserts output contains `Model artifact not found at:`
+- Added `scripts/embedding_retry_transient_smoke.sh` to assert transient retry behavior for embeddings requests:
+  - starts `qdrant` and a dedicated mock embeddings HTTP service container on the compose network
+  - mock service returns HTTP `500` on the first `/embed` call, then returns a valid vector response
+  - runs app `recent` mode with `EMBEDDING_SERVICE_URL` overridden to mock service
+  - asserts app run succeeds and verifies mock `/stats` reports at least two `/embed` calls with exactly one transient failure
 
 ## Phase 16: Documentation and Operations
 

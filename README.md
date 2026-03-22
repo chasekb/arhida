@@ -281,6 +281,12 @@ Model artifacts missing failure smoke check (verifies embeddings service fails f
 bash scripts/model_artifacts_missing_smoke.sh
 ```
 
+Transient embeddings retry failure smoke check (verifies app retries and recovers when the embeddings service returns an initial transient error):
+
+```bash
+bash scripts/embedding_retry_transient_smoke.sh
+```
+
 ## Project Structure
 
 ```
