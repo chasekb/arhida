@@ -40,6 +40,7 @@ EMBED_RESPONSE="$(curl -fsS -X POST "${EMBEDDINGS_URL}/embed" \
 
 python3 - <<'PY' <<<"${EMBED_RESPONSE}"
 import json
+import math
 import sys
 
 payload = json.loads(sys.stdin.read())
@@ -55,7 +56,13 @@ for i, vector in enumerate(vectors):
             f"embed verification failed: vector {i} dim {len(vector)} != {dimension}"
         )
 
-print("[smoke] embed response vector count/dim verified")
+    norm = math.sqrt(sum((float(v) ** 2 for v in vector)))
+    if not (0.99 <= norm <= 1.01):
+        raise SystemExit(
+            f"embed verification failed: vector {i} norm {norm:.6f} is not ~1.0"
+        )
+
+print("[smoke] embed response vector count/dim/normalization verified")
 PY
 
 DETERMINISM_RESPONSE="$(curl -fsS -X POST "${EMBEDDINGS_URL}/embed" \

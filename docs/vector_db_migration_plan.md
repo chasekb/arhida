@@ -1298,7 +1298,7 @@ Current implementation details for Phase 7 progress:
 - [ ] Implement ONNX Runtime session initialization
 - [x] Implement batch inference
 - [x] Implement output-dimension validation
-- [ ] Implement vector normalization strategy
+- [x] Implement vector normalization strategy
 - [x] Implement runtime warmup inference
 - [ ] Implement tokenizer integration
 - [x] Add tests or verification for returned embedding dimension and stability
@@ -1312,7 +1312,7 @@ Current implementation details for Phase 8 progress:
   - `OnnxCpuBackend`
   - `OnnxCudaBackend`
   - `MlxBackend`
-  - each validates positive output dimension at initialization and returns deterministic placeholder vectors sized to configured dimension
+  - each validates positive output dimension at initialization and returns deterministic normalized vectors sized to configured dimension
 - Added backend selection factory:
   - `embeddings_service/include/embedding/BackendFactory.h`
   - `embeddings_service/src/embedding/BackendFactory.cpp`
@@ -1328,8 +1328,12 @@ Current implementation details for Phase 8 progress:
 - `/embed` now enforces backend output shape checks at runtime:
   - vector count must match request input count
   - each returned vector must match configured model dimension
+- Backend scaffold now applies service-side vector normalization for all current backends:
+  - deterministic pseudo-embeddings are normalized to unit length before response
+  - behavior keeps cosine-distance assumptions aligned for downstream Qdrant usage
 - `scripts/embeddings_smoke.sh` now verifies deterministic backend behavior by asserting
   identical inputs return identical vectors in the same response.
+  - smoke checks now also verify returned vector norms are approximately 1.0
 
 ## Phase 9: Accelerator Support
 
