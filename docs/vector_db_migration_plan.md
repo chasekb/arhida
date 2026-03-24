@@ -1478,8 +1478,8 @@ Current implementation details for remaining Phase 12 mode validation:
 ### Data Validation
 - [ ] Verify vector dimension matches configured collection dimension
 - [ ] Verify payload fields are complete and correctly serialized
-- [ ] Verify deterministic id generation
-- [ ] Verify duplicate records update correctly
+- [x] Verify deterministic id generation
+- [x] Verify duplicate records update correctly
 - [ ] Verify filtering by set/date still works for backfill purposes
 
 ### Performance Validation
@@ -1520,6 +1520,10 @@ Current implementation details for Phase 15 failure validation progress:
 - Added `scripts/accelerator_unavailable_smoke.sh` to assert fail-fast behavior when an unavailable accelerator mode is requested:
   - runs embeddings service with `DEVICE=cuda-unavailable` and `ACCELERATOR_BACKEND=onnx`
   - expects non-zero startup exit and asserts output contains `Unsupported embedding backend/device combination`
+- Added `scripts/qdrant_idempotent_upsert_smoke.sh` for data-validation coverage of deterministic IDs and update semantics:
+  - derives Qdrant point IDs via the same FNV-1a strategy used in `QdrantStorage::makePointId`
+  - verifies the same identifier produces the same point ID and distinct identifiers produce distinct IDs for smoke inputs
+  - upserts the same point ID twice with changed payload and asserts final scroll result contains a single point with updated payload values
 
 ## Phase 16: Documentation and Operations
 

@@ -293,6 +293,12 @@ Accelerator unavailable failure smoke check (verifies embeddings service fails f
 bash scripts/accelerator_unavailable_smoke.sh
 ```
 
+Qdrant deterministic-id/idempotent-upsert smoke check (verifies duplicate upserts update existing points and deterministic point IDs remain stable):
+
+```bash
+bash scripts/qdrant_idempotent_upsert_smoke.sh
+```
+
 ## Project Structure
 
 ```
