@@ -287,6 +287,12 @@ Transient embeddings retry failure smoke check (verifies app retries and recover
 bash scripts/embedding_retry_transient_smoke.sh
 ```
 
+Accelerator unavailable failure smoke check (verifies embeddings service fails fast when an unavailable/unsupported accelerator mode is requested):
+
+```bash
+bash scripts/accelerator_unavailable_smoke.sh
+```
+
 ## Project Structure
 
 ```

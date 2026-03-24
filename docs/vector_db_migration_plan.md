@@ -1493,7 +1493,7 @@ Current implementation details for remaining Phase 12 mode validation:
 - [x] Verify behavior when embeddings service is unavailable
 - [x] Verify behavior when Qdrant is unavailable
 - [x] Verify behavior when model artifacts are missing
-- [ ] Verify behavior when accelerator is requested but unavailable
+- [x] Verify behavior when accelerator is requested but unavailable
 - [x] Verify retry behavior under transient failures
 
 Current implementation details for Phase 15 failure validation progress:
@@ -1517,6 +1517,9 @@ Current implementation details for Phase 15 failure validation progress:
   - mock service returns HTTP `500` on the first `/embed` call, then returns a valid vector response
   - runs app `recent` mode with `EMBEDDING_SERVICE_URL` overridden to mock service
   - asserts app run succeeds and verifies mock `/stats` reports at least two `/embed` calls with exactly one transient failure
+- Added `scripts/accelerator_unavailable_smoke.sh` to assert fail-fast behavior when an unavailable accelerator mode is requested:
+  - runs embeddings service with `DEVICE=cuda-unavailable` and `ACCELERATOR_BACKEND=onnx`
+  - expects non-zero startup exit and asserts output contains `Unsupported embedding backend/device combination`
 
 ## Phase 16: Documentation and Operations
 
