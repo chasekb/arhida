@@ -91,6 +91,7 @@ jobs:
         run: |
           docker run --rm \
             --network host \
+            -e VECTOR_DB_PROVIDER=postgres \
             -e POSTGRES_HOST=127.0.0.1 \
             -e POSTGRES_DB=test \
             -e POSTGRES_USER=test \
