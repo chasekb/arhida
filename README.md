@@ -299,6 +299,12 @@ Qdrant deterministic-id/idempotent-upsert smoke check (verifies duplicate upsert
 bash scripts/qdrant_idempotent_upsert_smoke.sh
 ```
 
+Qdrant dimension/payload smoke check (verifies collection dimension alignment and representative payload field serialization):
+
+```bash
+bash scripts/qdrant_dimension_payload_smoke.sh
+```
+
 ## Project Structure
 
 ```

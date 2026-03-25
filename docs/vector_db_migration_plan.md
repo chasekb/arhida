@@ -1476,8 +1476,8 @@ Current implementation details for remaining Phase 12 mode validation:
 - [ ] Verify backfill mode works end to end
 
 ### Data Validation
-- [ ] Verify vector dimension matches configured collection dimension
-- [ ] Verify payload fields are complete and correctly serialized
+- [x] Verify vector dimension matches configured collection dimension
+- [x] Verify payload fields are complete and correctly serialized
 - [x] Verify deterministic id generation
 - [x] Verify duplicate records update correctly
 - [ ] Verify filtering by set/date still works for backfill purposes
@@ -1524,6 +1524,10 @@ Current implementation details for Phase 15 failure validation progress:
   - derives Qdrant point IDs via the same FNV-1a strategy used in `QdrantStorage::makePointId`
   - verifies the same identifier produces the same point ID and distinct identifiers produce distinct IDs for smoke inputs
   - upserts the same point ID twice with changed payload and asserts final scroll result contains a single point with updated payload values
+- Added `scripts/qdrant_dimension_payload_smoke.sh` for data-validation coverage of collection dimension and payload serialization:
+  - creates a temporary collection and asserts Qdrant-reported vector size equals configured `VECTOR_SIZE`
+  - upserts a representative point containing `header_*` and `metadata_*` payload fields used by `QdrantStorage`
+  - asserts required payload keys are present with expected JSON types after scroll retrieval
 
 ## Phase 16: Documentation and Operations
 
