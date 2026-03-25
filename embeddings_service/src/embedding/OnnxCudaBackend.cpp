@@ -74,3 +74,5 @@ OnnxCudaBackend::embed(const BatchInput& input) {
 }
 
 std::string OnnxCudaBackend::backendName() const { return "onnx-cuda"; }
+
+std::string OnnxCudaBackend::executionProvider() const { return "CUDA"; }

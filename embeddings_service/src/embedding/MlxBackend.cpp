@@ -72,3 +72,5 @@ std::vector<std::vector<float>> MlxBackend::embed(const BatchInput& input) {
 }
 
 std::string MlxBackend::backendName() const { return "mlx"; }
+
+std::string MlxBackend::executionProvider() const { return "MLX"; }

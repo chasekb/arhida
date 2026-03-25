@@ -50,6 +50,13 @@ bool fileExists(const std::string& path) {
 bool directoryExists(const std::string& path) {
   return std::filesystem::exists(path) && std::filesystem::is_directory(path);
 }
+
+std::string toUpper(std::string value) {
+  for (char& ch : value) {
+    ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+  }
+  return value;
+}
 } // namespace
 
 EmbeddingServiceConfig EmbeddingServiceConfig::fromEnvironment() {
@@ -66,6 +73,16 @@ EmbeddingServiceConfig EmbeddingServiceConfig::fromEnvironment() {
   cfg.device = getEnvString("DEVICE", cfg.device);
   cfg.accelerator_backend =
       getEnvString("ACCELERATOR_BACKEND", cfg.accelerator_backend);
+  cfg.ort_execution_provider =
+      toUpper(getEnvString("ORT_EXECUTION_PROVIDER", cfg.ort_execution_provider));
+  cfg.ort_intra_threads =
+      getEnvInt("ORT_INTRA_THREADS", cfg.ort_intra_threads);
+  cfg.ort_inter_threads =
+      getEnvInt("ORT_INTER_THREADS", cfg.ort_inter_threads);
+  cfg.ort_graph_optimization_level =
+      getEnvString("ORT_GRAPH_OPT_LEVEL", cfg.ort_graph_optimization_level);
+  cfg.accelerator_fallback =
+      getEnvBool("ACCELERATOR_FALLBACK_TO_CPU", cfg.accelerator_fallback);
   cfg.service_version = getEnvString("SERVICE_VERSION", cfg.service_version);
   cfg.strict_model_validation =
       getEnvBool("STRICT_MODEL_VALIDATION", cfg.strict_model_validation);
@@ -85,4 +102,8 @@ EmbeddingServiceConfig EmbeddingServiceConfig::fromEnvironment() {
   }
 
   return cfg;
+}
+
+bool EmbeddingServiceConfig::shouldFallbackToCpu() const {
+  return accelerator_fallback;
 }

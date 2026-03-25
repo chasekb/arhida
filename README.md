@@ -53,7 +53,9 @@ Additional accelerator/runtime variables for embeddings container:
 
 - `DEVICE=cpu|cuda|mlx`
 - `ORT_EXECUTION_PROVIDER=CPU|CUDA`
+- `ORT_INTRA_THREADS`, `ORT_INTER_THREADS`, `ORT_GRAPH_OPT_LEVEL`
 - `ACCELERATOR_BACKEND=onnx|mlx`
+- `ACCELERATOR_FALLBACK_TO_CPU=true|false`
 - `MODEL_PATH`, `TOKENIZER_PATH`, `CUDA_VISIBLE_DEVICES`
 
 > Transitional PostgreSQL env vars remain in compose for migration utilities.
@@ -96,6 +98,13 @@ Apple Silicon / MLX development path:
 
 ```bash
 DEVICE=mlx ACCELERATOR_BACKEND=mlx docker-compose up -d
+```
+
+Optional accelerator fallback-to-CPU behavior (when an unsupported accelerator
+configuration is requested):
+
+```bash
+ACCELERATOR_FALLBACK_TO_CPU=true docker-compose up -d embeddings
 ```
 
 ## Model Artifacts and Volume Mounting
@@ -238,6 +247,16 @@ curl -fsS http://localhost:6333/healthz
 curl -fsS http://localhost:8000/health
 docker-compose ps
 ```
+
+Embeddings health payload now includes accelerator/runtime metadata for
+operational validation, including:
+
+- selected backend (`backend`)
+- active execution provider (`execution_provider`)
+- requested ORT execution provider (`requested_ort_execution_provider`)
+- ORT tuning knobs (`ort_intra_threads`, `ort_inter_threads`,
+  `ort_graph_optimization_level`)
+- accelerator fallback policy (`accelerator_fallback_enabled`)
 
 Qdrant storage smoke check (collection create + upsert + verify + cleanup):
 

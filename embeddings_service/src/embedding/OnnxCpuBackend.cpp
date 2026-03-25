@@ -73,3 +73,5 @@ std::vector<std::vector<float>> OnnxCpuBackend::embed(const BatchInput& input) {
 }
 
 std::string OnnxCpuBackend::backendName() const { return "onnx-cpu"; }
+
+std::string OnnxCpuBackend::executionProvider() const { return "CPU"; }

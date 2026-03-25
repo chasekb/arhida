@@ -66,6 +66,12 @@ void HttpServer::run() const {
             {"max_batch_size", cfg.max_batch_size},
             {"device", cfg.device},
             {"accelerator_backend", cfg.accelerator_backend},
+            {"execution_provider", shared_backend->executionProvider()},
+            {"requested_ort_execution_provider", cfg.ort_execution_provider},
+            {"ort_intra_threads", cfg.ort_intra_threads},
+            {"ort_inter_threads", cfg.ort_inter_threads},
+            {"ort_graph_optimization_level", cfg.ort_graph_optimization_level},
+            {"accelerator_fallback_enabled", cfg.accelerator_fallback},
             {"backend", shared_backend->backendName()},
             {"model_loaded", cfg.model_loaded},
             {"tokenizer_loaded", cfg.tokenizer_loaded},
@@ -199,9 +205,13 @@ void HttpServer::run() const {
 
   spdlog::info(
       "starting embeddings service version={} host={} port={} model={} "
-      "dimension={} device={} backend={}",
+      "dimension={} device={} backend={} exec_provider={} fallback={}"
+      " ort_intra_threads={} ort_inter_threads={} ort_graph_opt={}",
       config_.service_version, config_.host, config_.port, config_.model_name,
-      config_.model_dimension, config_.device, config_.accelerator_backend);
+      config_.model_dimension, config_.device, config_.accelerator_backend,
+      shared_backend->executionProvider(), config_.accelerator_fallback,
+      config_.ort_intra_threads, config_.ort_inter_threads,
+      config_.ort_graph_optimization_level);
 
   drogon::app().addListener(config_.host, static_cast<uint16_t>(config_.port));
   drogon::app().run();

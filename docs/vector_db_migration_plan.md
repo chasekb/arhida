@@ -1339,24 +1339,48 @@ Current implementation details for Phase 8 progress:
 
 ### CUDA
 - [ ] Add CUDA-capable ONNX Runtime deployment support
-- [ ] Support runtime selection of CUDA execution provider
-- [ ] Add health reporting for active CUDA execution provider
-- [ ] Add failure handling if CUDA is requested but unavailable
+- [x] Support runtime selection of CUDA execution provider
+- [x] Add health reporting for active CUDA execution provider
+- [x] Add failure handling if CUDA is requested but unavailable
 - [ ] Validate throughput on NVIDIA-backed environment
 
 ### MLX
 - [ ] Finalize technical approach for MLX backend implementation
 - [ ] Define whether MLX is native C++, bridged, or adapter-backed
-- [ ] Implement or stub `MlxBackend`
-- [ ] Support runtime selection of `DEVICE=mlx`
-- [ ] Add health reporting for active MLX backend
-- [ ] Add failure handling if MLX is requested but unavailable
+- [x] Implement or stub `MlxBackend`
+- [x] Support runtime selection of `DEVICE=mlx`
+- [x] Add health reporting for active MLX backend
+- [x] Add failure handling if MLX is requested but unavailable
 - [ ] Validate local Apple Silicon development path
 
 ### Fallback Logic
-- [ ] Decide whether accelerator failure should hard fail or fall back automatically
-- [ ] Implement explicit fallback policy
-- [ ] Document fallback behavior clearly
+- [x] Decide whether accelerator failure should hard fail or fall back automatically
+- [x] Implement explicit fallback policy
+- [x] Document fallback behavior clearly
+
+Current implementation details for Phase 9 progress:
+
+- `EmbeddingServiceConfig` now supports accelerator and ORT runtime controls:
+  - `ORT_EXECUTION_PROVIDER`, `ORT_INTRA_THREADS`, `ORT_INTER_THREADS`,
+    `ORT_GRAPH_OPT_LEVEL`
+  - `ACCELERATOR_FALLBACK_TO_CPU`
+- `BackendFactory` now enforces explicit runtime selection rules:
+  - `DEVICE=cuda` requires `ACCELERATOR_BACKEND=onnx` and
+    `ORT_EXECUTION_PROVIDER=CUDA`
+  - MLX selection requires `DEVICE=mlx` and `ACCELERATOR_BACKEND=mlx`
+  - unsupported accelerator requests fail fast by default, with optional CPU
+    fallback when `ACCELERATOR_FALLBACK_TO_CPU=true`
+- `/health` now reports accelerator/runtime metadata:
+  - active `execution_provider`
+  - requested ORT provider and thread/graph optimization settings
+  - `accelerator_fallback_enabled`
+- Compose and env examples now include new runtime/fallback settings:
+  - `docker-compose.yaml`
+  - `.env.example`
+  - `README.md`
+- `scripts/accelerator_unavailable_smoke.sh` now verifies both behaviors:
+  - fail-fast path (default)
+  - fallback-to-CPU path (`EXPECT_FALLBACK=true`)
 
 ## Phase 10: Embeddings-Service HTTP and Operational Behavior
 
