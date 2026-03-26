@@ -1338,7 +1338,7 @@ Current implementation details for Phase 8 progress:
 ## Phase 9: Accelerator Support
 
 ### CUDA
-- [ ] Add CUDA-capable ONNX Runtime deployment support
+- [x] Add CUDA-capable ONNX Runtime deployment support
 - [x] Support runtime selection of CUDA execution provider
 - [x] Add health reporting for active CUDA execution provider
 - [x] Add failure handling if CUDA is requested but unavailable
@@ -1378,6 +1378,12 @@ Current implementation details for Phase 9 progress:
   - `docker-compose.yaml`
   - `.env.example`
   - `README.md`
+- Embeddings-service build wiring now supports CUDA-capable ONNX Runtime package
+  resolution explicitly:
+  - `embeddings_service/CMakeLists.txt` now attempts `find_package(ONNXRuntime)`
+    and links `ONNXRuntime::ONNXRuntime` when present
+  - fallback to `ONNXRUNTIME_ROOT` include/lib paths remains available for
+    environments that provide ONNX Runtime outside package config discovery
 - `scripts/accelerator_unavailable_smoke.sh` now verifies both behaviors:
   - fail-fast path (default)
   - fallback-to-CPU path (`EXPECT_FALLBACK=true`)

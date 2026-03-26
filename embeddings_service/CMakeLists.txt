@@ -21,11 +21,11 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(spdlog)
 
 find_package(Drogon CONFIG REQUIRED)
+find_package(ONNXRuntime CONFIG QUIET)
 
 # ONNX Runtime is intentionally linked as an interface dependency in Phase 6.
 # Concrete model/session usage is introduced in Phase 8.
-find_package(onnxruntime CONFIG QUIET)
-if(NOT onnxruntime_FOUND)
+if(NOT ONNXRuntime_FOUND)
     add_library(onnxruntime_external INTERFACE)
     if(DEFINED ENV{ONNXRUNTIME_ROOT})
         target_include_directories(onnxruntime_external INTERFACE $ENV{ONNXRUNTIME_ROOT}/include)
@@ -34,7 +34,7 @@ if(NOT onnxruntime_FOUND)
     endif()
 else()
     add_library(onnxruntime_external INTERFACE)
-    target_link_libraries(onnxruntime_external INTERFACE onnxruntime::onnxruntime)
+    target_link_libraries(onnxruntime_external INTERFACE ONNXRuntime::ONNXRuntime)
 endif()
 
 add_executable(arhida-embeddings-service
