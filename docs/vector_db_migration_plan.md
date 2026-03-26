@@ -1491,13 +1491,23 @@ Current implementation details for remaining Phase 12 mode validation:
 ## Phase 15: Validation and Testing
 
 ### Functional Validation
-- [ ] Verify Qdrant starts and persists data
+- [x] Verify Qdrant starts and persists data
 - [ ] Verify embeddings service starts and reports healthy
 - [ ] Verify app starts only when dependencies are ready
 - [ ] Verify one record can be harvested, embedded, and stored successfully
 - [ ] Verify batch ingestion works
 - [ ] Verify recent mode works end to end
 - [ ] Verify backfill mode works end to end
+
+Current implementation details for Phase 15 functional validation progress:
+
+- Added `scripts/qdrant_persistence_smoke.sh` to validate Qdrant startup and
+  persistence semantics across service restart:
+  - starts `qdrant` via compose and waits for `/healthz`
+  - creates a temporary collection and upserts a representative point
+  - restarts `qdrant` and verifies the same payload remains queryable via
+    scroll filter
+  - cleans up the temporary collection after verification
 
 ### Data Validation
 - [x] Verify vector dimension matches configured collection dimension

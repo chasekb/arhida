@@ -330,6 +330,12 @@ Qdrant set/date filter smoke check (verifies `header_setSpecs` + `header_datesta
 bash scripts/qdrant_set_date_filter_smoke.sh
 ```
 
+Qdrant persistence smoke check (verifies point data survives qdrant restart with compose-backed storage):
+
+```bash
+bash scripts/qdrant_persistence_smoke.sh
+```
+
 ## Project Structure
 
 ```
