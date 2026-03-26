@@ -3,12 +3,15 @@ project(arhida-cpp VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+option(BUILD_MIGRATION_TOOL "Build PostgreSQL->Qdrant migration executable" OFF)
 
 # Find packages
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBPQ REQUIRED libpq)
 pkg_check_modules(LIBCURL REQUIRED libcurl)
 pkg_check_modules(LIBXML2 REQUIRED libxml-2.0)
+if(BUILD_MIGRATION_TOOL)
+    pkg_check_modules(LIBPQ REQUIRED libpq)
+endif()
 
 # Fetch header-only libraries
 include(FetchContent)
@@ -35,7 +38,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cli11)
 
 # Include directories
-include_directories(${LIBPQ_INCLUDE_DIRS})
 include_directories(${LIBCURL_INCLUDE_DIRS})
 include_directories(${LIBXML2_INCLUDE_DIRS})
 include_directories(include)
@@ -47,7 +49,6 @@ set(SOURCES
     src/embedding/EmbeddingClient.cpp
     src/embedding/EmbeddingTextBuilder.cpp
     src/oai/OaiClient.cpp
-    src/db/Database.cpp
     src/db/QdrantStorage.cpp
     src/db/QueryBuilder.cpp
     src/harvester/Harvester.cpp
@@ -59,22 +60,23 @@ set(SOURCES
 # Create executable
 add_executable(arhida-cpp ${SOURCES})
 
-set(MIGRATION_SOURCES
-    src/migrate_main.cpp
-    src/migration/PostgresToQdrantMigrator.cpp
-    src/config/Config.cpp
-    src/embedding/EmbeddingClient.cpp
-    src/embedding/EmbeddingTextBuilder.cpp
-    src/db/Database.cpp
-    src/db/QdrantStorage.cpp
-    src/utils/Logger.cpp
-)
+if(BUILD_MIGRATION_TOOL)
+    set(MIGRATION_SOURCES
+        src/migrate_main.cpp
+        src/migration/PostgresToQdrantMigrator.cpp
+        src/config/Config.cpp
+        src/embedding/EmbeddingClient.cpp
+        src/embedding/EmbeddingTextBuilder.cpp
+        src/db/Database.cpp
+        src/db/QdrantStorage.cpp
+        src/utils/Logger.cpp
+    )
 
-add_executable(arhida-migrate ${MIGRATION_SOURCES})
+    add_executable(arhida-migrate ${MIGRATION_SOURCES})
+endif()
 
 # Link libraries
 target_link_libraries(arhida-cpp
-    ${LIBPQ_LIBRARIES}
     ${LIBCURL_LIBRARIES}
     ${LIBXML2_LIBRARIES}
     nlohmann_json::nlohmann_json
@@ -83,18 +85,25 @@ target_link_libraries(arhida-cpp
     pthread
 )
 
-target_link_libraries(arhida-migrate
-    ${LIBPQ_LIBRARIES}
-    ${LIBCURL_LIBRARIES}
-    ${LIBXML2_LIBRARIES}
-    nlohmann_json::nlohmann_json
-    spdlog::spdlog
-    CLI11::CLI11
-    pthread
-)
+if(BUILD_MIGRATION_TOOL)
+    target_include_directories(arhida-migrate PRIVATE ${LIBPQ_INCLUDE_DIRS})
+    target_link_libraries(arhida-migrate
+        ${LIBPQ_LIBRARIES}
+        ${LIBCURL_LIBRARIES}
+        ${LIBXML2_LIBRARIES}
+        nlohmann_json::nlohmann_json
+        spdlog::spdlog
+        CLI11::CLI11
+        pthread
+    )
+endif()
 
 # Install target
-install(TARGETS arhida-cpp arhida-migrate DESTINATION bin)
+if(BUILD_MIGRATION_TOOL)
+    install(TARGETS arhida-cpp arhida-migrate DESTINATION bin)
+else()
+    install(TARGETS arhida-cpp DESTINATION bin)
+endif()
 
 # Testing (optional)
 enable_testing()

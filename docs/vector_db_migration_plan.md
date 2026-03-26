@@ -1710,7 +1710,7 @@ Current implementation details for Phase 15 failure validation progress:
 - [ ] Validate parity against PostgreSQL
 - [x] Switch primary runtime persistence to Qdrant
 - [x] Disable or remove PostgreSQL dependency from normal runtime path
-- [ ] Remove `libpq` from the main application build if no longer needed
+- [x] Remove `libpq` from the main application build if no longer needed
 - [ ] Remove obsolete Postgres-only documentation
 - [ ] Tag/release the migrated architecture
 
@@ -1749,6 +1749,12 @@ Current implementation details for Phase 17 progress:
   `VECTOR_DB_PROVIDER=qdrant` and fails fast for non-Qdrant app runtime
   providers, while initializing `QdrantStorage` as the primary runtime
   persistence backend.
+- Main CMake build path now decouples application runtime from `libpq`:
+  - `arhida-cpp` no longer compiles `src/db/Database.cpp` or links `${LIBPQ_LIBRARIES}`
+  - `libpq` discovery/build wiring is gated behind `BUILD_MIGRATION_TOOL`
+    (default `OFF`)
+  - migration utility (`arhida-migrate`) still supports PostgreSQL by enabling
+    `-DBUILD_MIGRATION_TOOL=ON` (now set by `scripts/postgres_to_qdrant_migration.sh`)
 
 ---
 
