@@ -1709,7 +1709,7 @@ Current implementation details for Phase 15 failure validation progress:
 - [ ] Run historical migration if in scope
 - [ ] Validate parity against PostgreSQL
 - [ ] Switch primary runtime persistence to Qdrant
-- [ ] Disable or remove PostgreSQL dependency from normal runtime path
+- [x] Disable or remove PostgreSQL dependency from normal runtime path
 - [ ] Remove `libpq` from the main application build if no longer needed
 - [ ] Remove obsolete Postgres-only documentation
 - [ ] Tag/release the migrated architecture
@@ -1734,6 +1734,17 @@ Go-live criteria definition (Phase 17):
     cutover sign-off)
   - Qdrant backup/restore procedure validated before final Postgres teardown
   - CI workflow for branch or release commit is green before final cutover
+
+Current implementation details for Phase 17 progress:
+
+- `docker-compose.yaml` app runtime no longer injects PostgreSQL credentials or
+  Docker Postgres secret file paths for normal app execution.
+- Compose app runtime now hard-pins `VECTOR_DB_PROVIDER=qdrant` and depends on
+  `qdrant` + `embeddings` services for default operational flow.
+- Compose-level Postgres secrets block was removed from normal runtime
+  orchestration.
+- `README.md` updated to reflect PostgreSQL is migration-tooling-only and that
+  normal compose runtime executes on Qdrant + embeddings.
 
 ---
 

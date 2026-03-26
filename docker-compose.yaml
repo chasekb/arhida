@@ -11,22 +11,8 @@ services:
       embeddings:
         condition: service_started
     environment:
-      # Legacy PostgreSQL configuration (kept temporarily for migration tooling)
-      - POSTGRES_HOST=${POSTGRES_HOST:-db-postgres}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_SCHEMA=${POSTGRES_SCHEMA}
-      - POSTGRES_TABLE=${POSTGRES_TABLE}
-
-      # Legacy Docker secrets (kept temporarily for migration tooling)
-      - DOCKER_POSTGRES_HOST=db-postgres
-      - DOCKER_POSTGRES_USER_FILE=/run/secrets/postgres-u
-      - DOCKER_POSTGRES_PASSWORD_FILE=/run/secrets/postgres-p
-
       # Vector database configuration
-      - VECTOR_DB_PROVIDER=${VECTOR_DB_PROVIDER:-qdrant}
+      - VECTOR_DB_PROVIDER=qdrant
       - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
       - QDRANT_COLLECTION=${QDRANT_COLLECTION:-arxiv_metadata}
       - VECTOR_SIZE=${VECTOR_SIZE:-384}
@@ -48,9 +34,6 @@ services:
       - ./config:/app/config:ro
     networks:
       - internal_net
-    secrets:
-      - postgres-u
-      - postgres-p
     restart: unless-stopped
 
     # Health check
@@ -110,12 +93,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-
-secrets:
-  postgres-u:
-    file: db/postgres-u.txt
-  postgres-p:
-    file: db/postgres-p.txt
 
 networks:
   internal_net:

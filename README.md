@@ -7,7 +7,7 @@ The active migration target is:
 
 - **Qdrant** as the primary persistence backend
 - **Embeddings service** (`/health`, `/embed`) for vector generation
-- **PostgreSQL kept temporarily** for migration compatibility tooling
+- **PostgreSQL restricted to historical migration tooling** (not normal runtime)
 
 ## Features
 
@@ -58,7 +58,8 @@ Additional accelerator/runtime variables for embeddings container:
 - `ACCELERATOR_FALLBACK_TO_CPU=true|false`
 - `MODEL_PATH`, `TOKENIZER_PATH`, `CUDA_VISIBLE_DEVICES`
 
-> Transitional PostgreSQL env vars remain in compose for migration utilities.
+> `docker-compose.yaml` now runs normal application workflows on Qdrant +
+> embeddings only.
 
 ## Usage
 
@@ -204,11 +205,11 @@ docker-compose up -d app
 
 Current migration posture:
 
-1. Keep legacy PostgreSQL env/secrets available only for migration tooling.
-2. Run harvester in vector mode (`VECTOR_DB_PROVIDER=qdrant`).
-3. Validate embeddings service health (`/health`) and Qdrant health (`/healthz`).
-4. Backfill and recent runs write vectors + payloads into Qdrant.
-5. Verify data parity/coverage before removing Postgres runtime dependencies.
+1. Run harvester in vector mode (`VECTOR_DB_PROVIDER=qdrant`).
+2. Validate embeddings service health (`/health`) and Qdrant health (`/healthz`).
+3. Backfill and recent runs write vectors + payloads into Qdrant.
+4. Execute historical PostgreSQL migration utility when legacy data migration is needed.
+5. Verify data parity/coverage before final PostgreSQL decommission steps.
 
 ## Backup and Restore (Qdrant Storage)
 
