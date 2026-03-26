@@ -1492,7 +1492,7 @@ Current implementation details for remaining Phase 12 mode validation:
 
 ### Functional Validation
 - [x] Verify Qdrant starts and persists data
-- [ ] Verify embeddings service starts and reports healthy
+- [x] Verify embeddings service starts and reports healthy
 - [ ] Verify app starts only when dependencies are ready
 - [ ] Verify one record can be harvested, embedded, and stored successfully
 - [ ] Verify batch ingestion works
@@ -1508,6 +1508,12 @@ Current implementation details for Phase 15 functional validation progress:
   - restarts `qdrant` and verifies the same payload remains queryable via
     scroll filter
   - cleans up the temporary collection after verification
+- Added `scripts/embeddings_startup_health_smoke.sh` to validate embeddings
+  service startup + readiness health:
+  - starts `embeddings` via compose and waits for `/health`
+  - asserts health payload fields `ok=true` and `warmup_complete=true`
+  - verifies readiness metadata includes a positive `dimension` and non-empty
+    `backend`
 
 ### Data Validation
 - [x] Verify vector dimension matches configured collection dimension
