@@ -336,6 +336,12 @@ Qdrant persistence smoke check (verifies point data survives qdrant restart with
 bash scripts/qdrant_persistence_smoke.sh
 ```
 
+App dependency readiness smoke check (verifies app startup fails without qdrant/embeddings and succeeds once both dependencies are healthy):
+
+```bash
+bash scripts/app_dependency_readiness_smoke.sh
+```
+
 ## Project Structure
 
 ```
