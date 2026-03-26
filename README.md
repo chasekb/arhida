@@ -354,6 +354,18 @@ Batch-ingestion smoke check (verifies multi-record batch persistence via `recent
 bash scripts/batch_ingestion_smoke.sh
 ```
 
+Recent-mode end-to-end smoke check (verifies compose-backed `recent` mode persists data into an isolated Qdrant collection):
+
+```bash
+bash scripts/recent_mode_e2e_smoke.sh
+```
+
+Backfill-mode end-to-end smoke check (verifies compose-backed `backfill` mode persists data into an isolated Qdrant collection):
+
+```bash
+bash scripts/backfill_mode_e2e_smoke.sh
+```
+
 ## Project Structure
 
 ```

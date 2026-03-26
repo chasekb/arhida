@@ -1496,8 +1496,8 @@ Current implementation details for remaining Phase 12 mode validation:
 - [x] Verify app starts only when dependencies are ready
 - [x] Verify one record can be harvested, embedded, and stored successfully
 - [x] Verify batch ingestion works
-- [ ] Verify recent mode works end to end
-- [ ] Verify backfill mode works end to end
+- [x] Verify recent mode works end to end
+- [x] Verify backfill mode works end to end
 
 Current implementation details for Phase 15 functional validation progress:
 
@@ -1531,6 +1531,19 @@ Current implementation details for Phase 15 functional validation progress:
   - writes to an isolated temporary collection override for repeatable runs
   - verifies Qdrant exact point-count endpoint returns at least two persisted
     points after ingestion
+- Added `scripts/recent_mode_e2e_smoke.sh` to validate compose-backed
+  `recent` mode end-to-end behavior:
+  - starts qdrant + embeddings and waits for both health endpoints
+  - runs app `recent` mode against an isolated temporary Qdrant collection
+  - verifies Qdrant exact point-count endpoint returns at least one persisted
+    point after run completion
+- Added `scripts/backfill_mode_e2e_smoke.sh` to validate compose-backed
+  `backfill` mode end-to-end behavior:
+  - starts qdrant + embeddings and waits for both health endpoints
+  - runs app `backfill` mode against an isolated temporary Qdrant collection
+    with configurable `--start-date`, `--end-date`, and `--set-specs`
+  - verifies Qdrant exact point-count endpoint returns at least one persisted
+    point after run completion
 
 ### Data Validation
 - [x] Verify vector dimension matches configured collection dimension
