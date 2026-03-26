@@ -74,23 +74,69 @@ jobs:
         image: qdrant/qdrant:latest
         ports:
           - 6333:6333
-      embeddings:
-        image: ghcr.io/chasekb/arhida-embeddings:local
-        env:
-          MODEL_NAME: bge-small-en-v1.5
-          MODEL_DIMENSION: 384
-          MAX_BATCH_SIZE: 64
-          DEVICE: cpu
-          ORT_EXECUTION_PROVIDER: CPU
-          ACCELERATOR_BACKEND: onnx
-          STRICT_MODEL_VALIDATION: false
-          SERVICE_PORT: 8000
-          REQUEST_TIMEOUT_MS: 30000
-        ports:
-          - 8000:8000
     steps:
       - name: Pull image
         run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Start mock embeddings service
+        run: |
+          nohup python3 - <<'PY' >/tmp/mock-embeddings.log 2>&1 &
+          import json
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+
+          DIM = 384
+
+          class Handler(BaseHTTPRequestHandler):
+              def _send(self, code, payload):
+                  body = json.dumps(payload).encode("utf-8")
+                  self.send_response(code)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def log_message(self, format, *args):
+                  return
+
+              def do_GET(self):
+                  if self.path == "/health":
+                      self._send(200, {
+                          "ok": True,
+                          "service": "mock-embeddings",
+                          "model": "bge-small-en-v1.5",
+                          "dimension": DIM,
+                          "warmup_complete": True,
+                      })
+                  else:
+                      self._send(404, {"ok": False, "error": "not_found"})
+
+              def do_POST(self):
+                  if self.path != "/embed":
+                      self._send(404, {"ok": False, "error": "not_found"})
+                      return
+
+                  try:
+                      length = int(self.headers.get("Content-Length", "0"))
+                      payload = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+                  except Exception:
+                      self._send(400, {"ok": False, "error": "invalid_json"})
+                      return
+
+                  inputs = payload.get("inputs", [])
+                  if not isinstance(inputs, list) or any(not isinstance(x, str) for x in inputs):
+                      self._send(400, {"ok": False, "error": "invalid_inputs"})
+                      return
+
+                  vectors = [[0.0] * DIM for _ in inputs]
+                  self._send(200, {
+                      "model": "bge-small-en-v1.5",
+                      "dimension": DIM,
+                      "vectors": vectors,
+                  })
+
+          HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
+          PY
+          echo $! >/tmp/mock-embeddings.pid
 
       - name: Wait for qdrant health
         run: |
@@ -129,6 +175,13 @@ jobs:
             -e ARXIV_BATCH_SIZE=5 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
             --mode recent
+
+      - name: Stop mock embeddings service
+        if: always()
+        run: |
+          if [ -f /tmp/mock-embeddings.pid ]; then
+            kill "$(cat /tmp/mock-embeddings.pid)" || true
+          fi
 
   release:
     runs-on: ubuntu-latest
