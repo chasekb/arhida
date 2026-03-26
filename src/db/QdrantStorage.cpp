@@ -8,10 +8,12 @@
 #include "config/Config.h"
 #include "utils/Logger.h"
 #include <curl/curl.h>
+#include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <iomanip>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -25,6 +27,28 @@ size_t writeCallback(void *contents, size_t size, size_t nmemb, void *userp) {
   auto *buffer = static_cast<std::string *>(userp);
   buffer->append(static_cast<char *>(contents), total_size);
   return total_size;
+}
+
+std::optional<std::size_t> parseCountResult(const std::string &response) {
+  auto payload = json::parse(response, nullptr, false);
+  if (payload.is_discarded() || !payload.contains("result") ||
+      !payload["result"].contains("count")) {
+    return std::nullopt;
+  }
+
+  const auto &count_field = payload["result"]["count"];
+  if (count_field.is_number_unsigned()) {
+    return count_field.get<std::size_t>();
+  }
+  if (count_field.is_number_integer()) {
+    const auto signed_count = count_field.get<long long>();
+    if (signed_count < 0) {
+      return std::nullopt;
+    }
+    return static_cast<std::size_t>(signed_count);
+  }
+
+  return std::nullopt;
 }
 } // namespace
 
@@ -123,6 +147,199 @@ void QdrantStorage::upsertRecord(const Record &record,
   }
 
   spdlog::info("Upserted Qdrant point for {}", record.header_identifier);
+}
+
+void QdrantStorage::upsertRecordsBatch(
+    const std::vector<Record> &records,
+    const std::vector<std::vector<float>> &embeddings) {
+  if (records.empty()) {
+    return;
+  }
+
+  if (records.size() != embeddings.size()) {
+    throw std::runtime_error(
+        "Qdrant batch upsert requires records and embeddings to have matching "
+        "sizes");
+  }
+
+  Config &config = Config::instance();
+  json points = json::array();
+
+  for (std::size_t i = 0; i < records.size(); ++i) {
+    const auto &record = records[i];
+    const auto &embedding = embeddings[i];
+
+    if (embedding.empty()) {
+      throw std::runtime_error(
+          "Qdrant batch upsert requires non-empty embeddings");
+    }
+
+    if (static_cast<int>(embedding.size()) != config.getVectorSize()) {
+      throw std::runtime_error(
+          "Qdrant embedding dimension mismatch for batch upsert: expected " +
+          std::to_string(config.getVectorSize()) + ", got " +
+          std::to_string(embedding.size()));
+    }
+
+    json payload = {
+        {"header_identifier", record.header_identifier},
+        {"header_datestamp", record.header_datestamp},
+        {"header_setSpecs", record.header_setSpecs},
+        {"metadata_creator", record.metadata_creator},
+        {"metadata_date", record.metadata_date},
+        {"metadata_description", record.metadata_description},
+        {"metadata_identifier", record.metadata_identifier},
+        {"metadata_subject", record.metadata_subject},
+        {"metadata_title", record.metadata_title},
+        {"metadata_type", record.metadata_type}};
+
+    points.push_back({{"id", makePointId(record.header_identifier)},
+                      {"vector", embedding},
+                      {"payload", payload}});
+  }
+
+  json request_body = {{"points", points}};
+
+  long response_code = 0;
+  auto response = performRequest("PUT",
+                                 "/collections/" + collection_name_ + "/points",
+                                 request_body.dump(), &response_code);
+  if (response_code < 200 || response_code >= 300) {
+    throw std::runtime_error("Qdrant batch point upsert failed with HTTP " +
+                             std::to_string(response_code) + ": " + response);
+  }
+}
+
+std::size_t QdrantStorage::countPoints() const {
+  const json request_body = {{"exact", true}};
+
+  long response_code = 0;
+  const auto response = performRequest(
+      "POST", "/collections/" + collection_name_ + "/points/count",
+      request_body.dump(), &response_code);
+  if (response_code < 200 || response_code >= 300) {
+    throw std::runtime_error("Qdrant count request failed with HTTP " +
+                             std::to_string(response_code));
+  }
+
+  const auto parsed = parseCountResult(response);
+  if (!parsed.has_value()) {
+    throw std::runtime_error("Failed to parse Qdrant count response");
+  }
+
+  return parsed.value();
+}
+
+std::size_t QdrantStorage::countPointsForDate(const std::string &date) const {
+  std::size_t count = 0;
+  json request_body = {{"with_payload", json::array({"header_datestamp"})},
+                       {"with_vector", false},
+                       {"limit", 256}};
+
+  json offset = nullptr;
+  do {
+    if (!offset.is_null()) {
+      request_body["offset"] = offset;
+    } else {
+      request_body.erase("offset");
+    }
+
+    long response_code = 0;
+    const auto response = performRequest(
+        "POST", "/collections/" + collection_name_ + "/points/scroll",
+        request_body.dump(), &response_code);
+    if (response_code < 200 || response_code >= 300) {
+      throw std::runtime_error("Qdrant date-count scroll request failed for " +
+                               date + " with HTTP " +
+                               std::to_string(response_code));
+    }
+
+    const auto payload = json::parse(response, nullptr, false);
+    if (payload.is_discarded() || !payload.contains("result") ||
+        !payload["result"].contains("points") ||
+        !payload["result"]["points"].is_array()) {
+      throw std::runtime_error("Invalid Qdrant date-count response payload for " +
+                               date);
+    }
+
+    for (const auto &point : payload["result"]["points"]) {
+      if (!point.contains("payload") ||
+          !point["payload"].contains("header_datestamp") ||
+          !point["payload"]["header_datestamp"].is_string()) {
+        continue;
+      }
+
+      const std::string datestamp =
+          point["payload"]["header_datestamp"].get<std::string>();
+      if (datestamp.size() >= 10 && datestamp.substr(0, 10) == date) {
+        ++count;
+      }
+    }
+
+    offset = nullptr;
+    if (payload["result"].contains("next_page_offset") &&
+        !payload["result"]["next_page_offset"].is_null()) {
+      offset = payload["result"]["next_page_offset"];
+    }
+  } while (!offset.is_null());
+
+  return count;
+}
+
+std::size_t QdrantStorage::countPointsForSetSpec(const std::string &set_spec) const {
+  const json request_body = {
+      {"exact", true},
+      {"filter",
+       {{"must", json::array({{{"key", "header_setSpecs"},
+                                {"match", {{"any", json::array({set_spec})}}}}})}}}};
+
+  long response_code = 0;
+  const auto response = performRequest(
+      "POST", "/collections/" + collection_name_ + "/points/count",
+      request_body.dump(), &response_code);
+  if (response_code < 200 || response_code >= 300) {
+    throw std::runtime_error("Qdrant set-spec count request failed for " +
+                             set_spec + " with HTTP " +
+                             std::to_string(response_code));
+  }
+
+  const auto parsed = parseCountResult(response);
+  if (!parsed.has_value()) {
+    throw std::runtime_error(
+        "Failed to parse Qdrant set-spec count response for " + set_spec);
+  }
+
+  return parsed.value();
+}
+
+bool QdrantStorage::identifierExists(const std::string &identifier) const {
+  const json request_body = {
+      {"filter",
+       {{"must", json::array({{{"key", "header_identifier"},
+                                {"match", {{"value", identifier}}}}})}}},
+      {"with_payload", false},
+      {"with_vector", false},
+      {"limit", 1}};
+
+  long response_code = 0;
+  const auto response = performRequest(
+      "POST", "/collections/" + collection_name_ + "/points/scroll",
+      request_body.dump(), &response_code);
+  if (response_code < 200 || response_code >= 300) {
+    throw std::runtime_error("Qdrant identifier existence check failed for " +
+                             identifier + " with HTTP " +
+                             std::to_string(response_code));
+  }
+
+  const auto payload = json::parse(response, nullptr, false);
+  if (payload.is_discarded() || !payload.contains("result") ||
+      !payload["result"].contains("points") ||
+      !payload["result"]["points"].is_array()) {
+    throw std::runtime_error(
+        "Invalid Qdrant identifier existence response payload");
+  }
+
+  return !payload["result"]["points"].empty();
 }
 
 std::string QdrantStorage::getCollectionName() const {

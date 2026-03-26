@@ -59,6 +59,19 @@ set(SOURCES
 # Create executable
 add_executable(arhida-cpp ${SOURCES})
 
+set(MIGRATION_SOURCES
+    src/migrate_main.cpp
+    src/migration/PostgresToQdrantMigrator.cpp
+    src/config/Config.cpp
+    src/embedding/EmbeddingClient.cpp
+    src/embedding/EmbeddingTextBuilder.cpp
+    src/db/Database.cpp
+    src/db/QdrantStorage.cpp
+    src/utils/Logger.cpp
+)
+
+add_executable(arhida-migrate ${MIGRATION_SOURCES})
+
 # Link libraries
 target_link_libraries(arhida-cpp
     ${LIBPQ_LIBRARIES}
@@ -70,8 +83,18 @@ target_link_libraries(arhida-cpp
     pthread
 )
 
+target_link_libraries(arhida-migrate
+    ${LIBPQ_LIBRARIES}
+    ${LIBCURL_LIBRARIES}
+    ${LIBXML2_LIBRARIES}
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+    CLI11::CLI11
+    pthread
+)
+
 # Install target
-install(TARGETS arhida-cpp DESTINATION bin)
+install(TARGETS arhida-cpp arhida-migrate DESTINATION bin)
 
 # Testing (optional)
 enable_testing()

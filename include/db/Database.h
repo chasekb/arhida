@@ -7,6 +7,7 @@
 #pragma once
 
 #include "db/StorageEngine.h"
+#include <cstddef>
 #include <string>
 #include <memory>
 #include <libpq-fe.h>
@@ -32,6 +33,11 @@ public:
     std::vector<std::string> getMissingDates(const std::string& start_date,
                                              const std::string& end_date,
                                              const std::string& set_spec) override;
+    std::vector<Record> fetchRecordsChunk(std::size_t limit, std::size_t offset) const;
+    std::size_t countRecords() const;
+    std::size_t countRecordsForDate(const std::string& date) const;
+    std::size_t countRecordsForSetSpec(const std::string& set_spec) const;
+    bool identifierExists(const std::string& identifier) const;
     
     // Query operations
     void execute(const std::string& query);

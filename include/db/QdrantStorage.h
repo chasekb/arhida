@@ -7,6 +7,8 @@
 #pragma once
 
 #include "db/StorageEngine.h"
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -25,6 +27,12 @@ public:
     void createIndexes(const std::string& schema_name, const std::string& table_name) override;
     void validateStorageConfiguration() const override;
     void upsertRecord(const Record& record, const std::vector<float>& embedding) override;
+    void upsertRecordsBatch(const std::vector<Record>& records,
+                            const std::vector<std::vector<float>>& embeddings);
+    std::size_t countPoints() const;
+    std::size_t countPointsForDate(const std::string& date) const;
+    std::size_t countPointsForSetSpec(const std::string& set_spec) const;
+    bool identifierExists(const std::string& identifier) const;
     std::vector<std::string> getMissingDates(const std::string& start_date,
                                              const std::string& end_date,
                                              const std::string& set_spec) override;

@@ -11,11 +11,51 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <utility>
 
 using json = nlohmann::json;
+
+namespace {
+
+std::vector<std::string> parseJsonArrayText(const char *text) {
+  if (!text) {
+    return {};
+  }
+
+  auto payload = json::parse(text, nullptr, false);
+  if (payload.is_discarded() || !payload.is_array()) {
+    return {};
+  }
+
+  std::vector<std::string> values;
+  values.reserve(payload.size());
+  for (const auto &item : payload) {
+    if (item.is_string()) {
+      values.push_back(item.get<std::string>());
+    }
+  }
+
+  return values;
+}
+
+std::optional<std::size_t> parseCount(PGresult *res) {
+  if (!res || PQntuples(res) != 1 || PQnfields(res) != 1 ||
+      PQgetisnull(res, 0, 0)) {
+    return std::nullopt;
+  }
+
+  try {
+    return static_cast<std::size_t>(
+        std::stoull(std::string(PQgetvalue(res, 0, 0))));
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+} // namespace
 
 Database::Database() : conn_(nullptr), connected_(false) {}
 
@@ -355,6 +395,205 @@ Database::getMissingDates(const std::string &start_date,
   }
 
   return missing_dates;
+}
+
+std::vector<Record> Database::fetchRecordsChunk(std::size_t limit,
+                                                std::size_t offset) const {
+  if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
+    throw std::runtime_error(
+        "Cannot fetch PostgreSQL chunk: connection is not available");
+  }
+
+  if (limit == 0) {
+    return {};
+  }
+
+  Config &config = Config::instance();
+  const std::string schema = config.getPostgresSchema();
+  const std::string table = config.getPostgresTable();
+
+  const std::string query = R"(
+    SELECT
+      header_identifier,
+      COALESCE(header_datestamp::text, ''),
+      COALESCE(header_setSpecs::text, '[]'),
+      COALESCE(metadata_creator::text, '[]'),
+      COALESCE(metadata_date::text, '[]'),
+      COALESCE(metadata_description, ''),
+      COALESCE(metadata_identifier::text, '[]'),
+      COALESCE(metadata_subject::text, '[]'),
+      COALESCE(metadata_title::text, '[]'),
+      COALESCE(metadata_type, '')
+    FROM )" +
+                            schema + "." + table + R"(
+    ORDER BY id ASC
+    LIMIT $1::bigint
+    OFFSET $2::bigint
+  )";
+
+  const std::string limit_text = std::to_string(limit);
+  const std::string offset_text = std::to_string(offset);
+  const char *param_values[2] = {limit_text.c_str(), offset_text.c_str()};
+
+  PGresult *res =
+      PQexecParams(conn_, query.c_str(), 2, nullptr, param_values, nullptr,
+                   nullptr, 0);
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    const std::string error = PQerrorMessage(conn_);
+    PQclear(res);
+    throw std::runtime_error("Failed to fetch PostgreSQL records chunk: " +
+                             error);
+  }
+
+  const int rows = PQntuples(res);
+  std::vector<Record> records;
+  records.reserve(static_cast<std::size_t>(rows));
+
+  for (int row = 0; row < rows; ++row) {
+    Record record;
+    record.header_identifier = PQgetvalue(res, row, 0);
+    record.header_datestamp = PQgetvalue(res, row, 1);
+    record.header_setSpecs = parseJsonArrayText(PQgetvalue(res, row, 2));
+    record.metadata_creator = parseJsonArrayText(PQgetvalue(res, row, 3));
+    record.metadata_date = parseJsonArrayText(PQgetvalue(res, row, 4));
+    record.metadata_description = PQgetvalue(res, row, 5);
+    record.metadata_identifier = parseJsonArrayText(PQgetvalue(res, row, 6));
+    record.metadata_subject = parseJsonArrayText(PQgetvalue(res, row, 7));
+    record.metadata_title = parseJsonArrayText(PQgetvalue(res, row, 8));
+    record.metadata_type = PQgetvalue(res, row, 9);
+    records.push_back(std::move(record));
+  }
+
+  PQclear(res);
+  return records;
+}
+
+std::size_t Database::countRecords() const {
+  if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
+    throw std::runtime_error(
+        "Cannot count PostgreSQL records: connection is not available");
+  }
+
+  Config &config = Config::instance();
+  const std::string schema = config.getPostgresSchema();
+  const std::string table = config.getPostgresTable();
+
+  const std::string query =
+      "SELECT COUNT(*)::bigint FROM " + schema + "." + table;
+
+  PGresult *res = PQexec(conn_, query.c_str());
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    const std::string error = PQerrorMessage(conn_);
+    PQclear(res);
+    throw std::runtime_error("Failed to count PostgreSQL records: " + error);
+  }
+
+  const auto parsed = parseCount(res);
+  PQclear(res);
+  if (!parsed.has_value()) {
+    throw std::runtime_error("Failed to parse PostgreSQL record count result");
+  }
+
+  return parsed.value();
+}
+
+std::size_t Database::countRecordsForDate(const std::string &date) const {
+  if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
+    throw std::runtime_error(
+        "Cannot count PostgreSQL records by date: connection is not available");
+  }
+
+  Config &config = Config::instance();
+  const std::string schema = config.getPostgresSchema();
+  const std::string table = config.getPostgresTable();
+
+  const std::string query =
+      "SELECT COUNT(*)::bigint FROM " + schema + "." + table +
+      " WHERE DATE(header_datestamp) = $1::date";
+
+  const char *param_values[1] = {date.c_str()};
+  PGresult *res = PQexecParams(conn_, query.c_str(), 1, nullptr, param_values,
+                               nullptr, nullptr, 0);
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    const std::string error = PQerrorMessage(conn_);
+    PQclear(res);
+    throw std::runtime_error("Failed to count PostgreSQL records for date " +
+                             date + ": " + error);
+  }
+
+  const auto parsed = parseCount(res);
+  PQclear(res);
+  if (!parsed.has_value()) {
+    throw std::runtime_error(
+        "Failed to parse PostgreSQL date count result for " + date);
+  }
+
+  return parsed.value();
+}
+
+std::size_t Database::countRecordsForSetSpec(const std::string &set_spec) const {
+  if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
+    throw std::runtime_error(
+        "Cannot count PostgreSQL records by set spec: connection is not available");
+  }
+
+  Config &config = Config::instance();
+  const std::string schema = config.getPostgresSchema();
+  const std::string table = config.getPostgresTable();
+  const std::string set_spec_json = json::array({set_spec}).dump();
+
+  const std::string query =
+      "SELECT COUNT(*)::bigint FROM " + schema + "." + table +
+      " WHERE header_setSpecs @> $1::jsonb";
+
+  const char *param_values[1] = {set_spec_json.c_str()};
+  PGresult *res = PQexecParams(conn_, query.c_str(), 1, nullptr, param_values,
+                               nullptr, nullptr, 0);
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    const std::string error = PQerrorMessage(conn_);
+    PQclear(res);
+    throw std::runtime_error(
+        "Failed to count PostgreSQL records for set spec " + set_spec +
+        ": " + error);
+  }
+
+  const auto parsed = parseCount(res);
+  PQclear(res);
+  if (!parsed.has_value()) {
+    throw std::runtime_error(
+        "Failed to parse PostgreSQL set-spec count result for " + set_spec);
+  }
+
+  return parsed.value();
+}
+
+bool Database::identifierExists(const std::string &identifier) const {
+  if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
+    throw std::runtime_error(
+        "Cannot check PostgreSQL identifier: connection is not available");
+  }
+
+  Config &config = Config::instance();
+  const std::string schema = config.getPostgresSchema();
+  const std::string table = config.getPostgresTable();
+
+  const std::string query =
+      "SELECT 1 FROM " + schema + "." + table +
+      " WHERE header_identifier = $1 LIMIT 1";
+
+  const char *param_values[1] = {identifier.c_str()};
+  PGresult *res = PQexecParams(conn_, query.c_str(), 1, nullptr, param_values,
+                               nullptr, nullptr, 0);
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    const std::string error = PQerrorMessage(conn_);
+    PQclear(res);
+    throw std::runtime_error("Failed to query PostgreSQL identifier " +
+                             identifier + ": " + error);
+  }
+
+  const bool exists = PQntuples(res) > 0;
+  PQclear(res);
+  return exists;
 }
 
 void Database::execute(const std::string &query) {

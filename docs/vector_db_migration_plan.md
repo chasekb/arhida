@@ -1504,16 +1504,50 @@ Current implementation details for remaining Phase 12 mode validation:
 
 ## Phase 14: Historical PostgreSQL Migration Utility
 
-- [ ] Design migration utility entry point
-- [ ] Reuse or implement PostgreSQL read path for historical records
-- [ ] Read historical records in chunks
-- [ ] Build embedding text for migrated records
-- [ ] Batch requests to embeddings service
-- [ ] Batch upserts to Qdrant
-- [ ] Add checkpoint/resume support
-- [ ] Add migration progress logging
-- [ ] Add parity validation for counts by day, set, and identifier
-- [ ] Define cutover criteria after migration completes
+- [x] Design migration utility entry point
+- [x] Reuse or implement PostgreSQL read path for historical records
+- [x] Read historical records in chunks
+- [x] Build embedding text for migrated records
+- [x] Batch requests to embeddings service
+- [x] Batch upserts to Qdrant
+- [x] Add checkpoint/resume support
+- [x] Add migration progress logging
+- [x] Add parity validation for counts by day, set, and identifier
+- [x] Define cutover criteria after migration completes
+
+Current implementation details for Phase 14 completion:
+
+- Added dedicated migration executable and CLI entrypoint:
+  - `src/migrate_main.cpp`
+  - supports `--chunk-size`, `--embedding-batch-size`, `--parity-sample-size`,
+    `--checkpoint-file`, and `--no-resume`
+- Added migration orchestration module:
+  - `include/migration/PostgresToQdrantMigrator.h`
+  - `src/migration/PostgresToQdrantMigrator.cpp`
+  - performs chunked PostgreSQL reads, embedding text generation, batched
+    embeddings requests, batched Qdrant upserts, checkpoint persistence, and
+    parity validation
+- Extended PostgreSQL storage APIs for migration/parity support:
+  - `fetchRecordsChunk(limit, offset)`
+  - `countRecords()`
+  - `countRecordsForDate(date)`
+  - `countRecordsForSetSpec(set_spec)`
+  - `identifierExists(identifier)`
+- Extended Qdrant storage APIs for migration/parity support:
+  - `upsertRecordsBatch(records, embeddings)`
+  - `countPoints()`
+  - `countPointsForDate(date)`
+  - `countPointsForSetSpec(set_spec)`
+  - `identifierExists(identifier)`
+- Added migration runner script:
+  - `scripts/postgres_to_qdrant_migration.sh`
+  - builds `arhida-migrate` and executes migration with environment-driven
+    runtime overrides
+- Added build integration for migration utility:
+  - `CMakeLists.txt` now defines `arhida-migrate` target and installs it
+- Checkpoint completion semantics hardened:
+  - checkpoint is marked `completed=true` only after parity validation passes
+  - parity failure persists checkpoint with `completed=false`
 
 ## Phase 15: Validation and Testing
 
