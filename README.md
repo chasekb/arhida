@@ -324,6 +324,12 @@ Qdrant dimension/payload smoke check (verifies collection dimension alignment an
 bash scripts/qdrant_dimension_payload_smoke.sh
 ```
 
+Qdrant set/date filter smoke check (verifies `header_setSpecs` + `header_datestamp` filtering semantics used by backfill missing-date logic):
+
+```bash
+bash scripts/qdrant_set_date_filter_smoke.sh
+```
+
 ## Project Structure
 
 ```

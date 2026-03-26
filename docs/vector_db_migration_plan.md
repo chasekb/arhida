@@ -1504,7 +1504,7 @@ Current implementation details for remaining Phase 12 mode validation:
 - [x] Verify payload fields are complete and correctly serialized
 - [x] Verify deterministic id generation
 - [x] Verify duplicate records update correctly
-- [ ] Verify filtering by set/date still works for backfill purposes
+- [x] Verify filtering by set/date still works for backfill purposes
 
 ### Performance Validation
 - [ ] Measure embedding throughput on CPU
@@ -1552,6 +1552,10 @@ Current implementation details for Phase 15 failure validation progress:
   - creates a temporary collection and asserts Qdrant-reported vector size equals configured `VECTOR_SIZE`
   - upserts a representative point containing `header_*` and `metadata_*` payload fields used by `QdrantStorage`
   - asserts required payload keys are present with expected JSON types after scroll retrieval
+- Added `scripts/qdrant_set_date_filter_smoke.sh` for data-validation coverage of backfill filtering semantics:
+  - creates a temporary collection and upserts representative records spanning matching and non-matching set/date combinations
+  - runs a Qdrant scroll filter using `header_setSpecs` (`match.any`) + `header_datestamp` range bounds
+  - verifies only expected dates are matched and missing-date derivation aligns with backfill expectations
 
 ## Phase 16: Documentation and Operations
 
