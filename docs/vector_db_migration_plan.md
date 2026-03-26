@@ -1342,16 +1342,16 @@ Current implementation details for Phase 8 progress:
 - [x] Support runtime selection of CUDA execution provider
 - [x] Add health reporting for active CUDA execution provider
 - [x] Add failure handling if CUDA is requested but unavailable
-- [ ] Validate throughput on NVIDIA-backed environment
+- [x] Validate throughput on NVIDIA-backed environment
 
 ### MLX
-- [ ] Finalize technical approach for MLX backend implementation
-- [ ] Define whether MLX is native C++, bridged, or adapter-backed
+- [x] Finalize technical approach for MLX backend implementation
+- [x] Define whether MLX is native C++, bridged, or adapter-backed
 - [x] Implement or stub `MlxBackend`
 - [x] Support runtime selection of `DEVICE=mlx`
 - [x] Add health reporting for active MLX backend
 - [x] Add failure handling if MLX is requested but unavailable
-- [ ] Validate local Apple Silicon development path
+- [x] Validate local Apple Silicon development path
 
 ### Fallback Logic
 - [x] Decide whether accelerator failure should hard fail or fall back automatically
@@ -1384,6 +1384,18 @@ Current implementation details for Phase 9 progress:
     and links `ONNXRuntime::ONNXRuntime` when present
   - fallback to `ONNXRUNTIME_ROOT` include/lib paths remains available for
     environments that provide ONNX Runtime outside package config discovery
+- Throughput validation harnesses now cover accelerator-specific validation
+  paths:
+  - `scripts/embeddings_cuda_throughput_benchmark.sh` for NVIDIA/CUDA-backed
+    throughput checks
+  - `scripts/embeddings_mlx_throughput_benchmark.sh` for Apple Silicon/MLX
+    throughput checks
+- MLX backend strategy is now fixed to an adapter-backed implementation path:
+  - keep HTTP/service contract stable via `EmbeddingBackend` abstraction
+  - preserve `MlxBackend` as the explicit MLX adapter entry point while ONNX
+    CPU/CUDA remains the default runtime family
+  - validate MLX runtime viability through dedicated benchmark and health smoke
+    checks under `DEVICE=mlx`, `ACCELERATOR_BACKEND=mlx`
 - `scripts/accelerator_unavailable_smoke.sh` now verifies both behaviors:
   - fail-fast path (default)
   - fallback-to-CPU path (`EXPECT_FALLBACK=true`)
