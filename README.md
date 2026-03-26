@@ -348,6 +348,12 @@ One-record ingest smoke check (verifies at least one record is harvested, embedd
 bash scripts/one_record_ingest_smoke.sh
 ```
 
+Batch-ingestion smoke check (verifies multi-record batch persistence via `recent` mode into an isolated Qdrant collection):
+
+```bash
+bash scripts/batch_ingestion_smoke.sh
+```
+
 ## Project Structure
 
 ```
