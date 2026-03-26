@@ -1711,7 +1711,7 @@ Current implementation details for Phase 15 failure validation progress:
 - [x] Switch primary runtime persistence to Qdrant
 - [x] Disable or remove PostgreSQL dependency from normal runtime path
 - [x] Remove `libpq` from the main application build if no longer needed
-- [ ] Remove obsolete Postgres-only documentation
+- [x] Remove obsolete Postgres-only documentation
 - [ ] Tag/release the migrated architecture
 
 Go-live criteria definition (Phase 17):
@@ -1755,6 +1755,12 @@ Current implementation details for Phase 17 progress:
     (default `OFF`)
   - migration utility (`arhida-migrate`) still supports PostgreSQL by enabling
     `-DBUILD_MIGRATION_TOOL=ON` (now set by `scripts/postgres_to_qdrant_migration.sh`)
+- CI workflow test runtime path now matches Qdrant cutover:
+  - `.github/workflows/build.yml` test job uses `qdrant` + `embeddings` services
+  - test container runtime env now sets `VECTOR_DB_PROVIDER=qdrant` with Qdrant and embeddings endpoints
+  - health wait gates added for `qdrant /healthz` and `embeddings /health` before test execution
+- `docs/cpp_transition.md` was reduced to an archived transition note and now points to
+  `docs/vector_db_migration_plan.md` as the active migration source of truth.
 
 ---
 
