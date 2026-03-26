@@ -85,6 +85,29 @@ if vectors[0] != vectors[1]:
 print("[smoke] deterministic output verified for identical inputs")
 PY
 
+PREPROCESS_RESPONSE="$(curl -fsS -X POST "${EMBEDDINGS_URL}/embed" \
+  -H "Content-Type: application/json" \
+  -d '{"inputs": ["tokenization   check", "tokenization check", "tokenization different"]}')"
+
+python3 - <<'PY' <<<"${PREPROCESS_RESPONSE}"
+import json
+import sys
+
+payload = json.loads(sys.stdin.read())
+vectors = payload.get("vectors", [])
+
+if len(vectors) != 3:
+    raise SystemExit(f"preprocess verification failed: expected 3 vectors, got {len(vectors)}")
+
+if vectors[0] != vectors[1]:
+    raise SystemExit("preprocess verification failed: whitespace-normalized inputs should match")
+
+if vectors[0] == vectors[2]:
+    raise SystemExit("tokenization verification failed: distinct token inputs unexpectedly matched")
+
+print("[smoke] whitespace normalization and tokenizer-sensitive output verified")
+PY
+
 OVERSIZE_BODY="$(python3 - <<'PY'
 import json
 import os

@@ -1295,12 +1295,12 @@ Current implementation details for Phase 7 progress:
 - [x] Implement `OnnxCpuBackend`
 - [x] Implement `OnnxCudaBackend`
 - [x] Define plan for `MlxBackend`
-- [ ] Implement ONNX Runtime session initialization
+- [x] Implement ONNX Runtime session initialization
 - [x] Implement batch inference
 - [x] Implement output-dimension validation
 - [x] Implement vector normalization strategy
 - [x] Implement runtime warmup inference
-- [ ] Implement tokenizer integration
+- [x] Implement tokenizer integration
 - [x] Add tests or verification for returned embedding dimension and stability
 
 Current implementation details for Phase 8 progress:
@@ -1331,9 +1331,18 @@ Current implementation details for Phase 8 progress:
 - Backend scaffold now applies service-side vector normalization for all current backends:
   - deterministic pseudo-embeddings are normalized to unit length before response
   - behavior keeps cosine-distance assumptions aligned for downstream Qdrant usage
+- ONNX CPU/CUDA backends now initialize runtime/model/tokenizer dependencies
+  during backend bootstrap:
+  - parse tokenizer vocabulary from `${TOKENIZER_PATH}/tokenizer.json`
+  - fail fast on missing/empty tokenizer vocab
+  - apply deterministic whitespace normalization + tokenization before embedding
+  - perform ONNX session initialization probe against configured model path
+    (using ONNX Runtime C++ API when headers are available at build time)
 - `scripts/embeddings_smoke.sh` now verifies deterministic backend behavior by asserting
   identical inputs return identical vectors in the same response.
   - smoke checks now also verify returned vector norms are approximately 1.0
+  - smoke checks now verify whitespace-normalized inputs map to identical vectors
+    while token-different inputs produce different vectors
 
 ## Phase 9: Accelerator Support
 

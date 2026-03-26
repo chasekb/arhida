@@ -15,7 +15,7 @@ createEmbeddingBackend(const EmbeddingServiceConfig& config) {
       throw std::runtime_error(reason);
     }
     spdlog::warn("{}; falling back to CPU backend", reason);
-    return std::make_unique<OnnxCpuBackend>(config.model_dimension);
+    return std::make_unique<OnnxCpuBackend>(config);
   };
 
   if (config.device == "mlx" || config.accelerator_backend == "mlx") {
@@ -35,7 +35,7 @@ createEmbeddingBackend(const EmbeddingServiceConfig& config) {
       return fallbackToCpu(
           "CUDA mode requires ORT_EXECUTION_PROVIDER=CUDA");
     }
-    return std::make_unique<OnnxCudaBackend>(config.model_dimension);
+    return std::make_unique<OnnxCudaBackend>(config);
   }
 
   if (config.device == "cpu") {
@@ -43,7 +43,7 @@ createEmbeddingBackend(const EmbeddingServiceConfig& config) {
       throw std::runtime_error(
           "CPU mode requires ACCELERATOR_BACKEND=onnx");
     }
-    return std::make_unique<OnnxCpuBackend>(config.model_dimension);
+    return std::make_unique<OnnxCpuBackend>(config);
   }
 
   return fallbackToCpu("Unsupported embedding backend/device combination: " +
