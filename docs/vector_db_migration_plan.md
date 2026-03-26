@@ -1705,7 +1705,7 @@ Current implementation details for Phase 15 failure validation progress:
 
 ## Phase 17: Cutover and Cleanup
 
-- [ ] Define go-live criteria
+- [x] Define go-live criteria
 - [ ] Run historical migration if in scope
 - [ ] Validate parity against PostgreSQL
 - [ ] Switch primary runtime persistence to Qdrant
@@ -1713,6 +1713,27 @@ Current implementation details for Phase 15 failure validation progress:
 - [ ] Remove `libpq` from the main application build if no longer needed
 - [ ] Remove obsolete Postgres-only documentation
 - [ ] Tag/release the migrated architecture
+
+Go-live criteria definition (Phase 17):
+
+- Migration execution criteria:
+  - historical migration utility completes with exit code `0`
+  - checkpoint file reports `completed=true`
+  - no unrecovered chunk-level migration failures in logs
+- Data parity criteria:
+  - parity validation pass at migration completion (total count parity)
+  - sampled identifier parity passes
+  - sampled date parity passes
+  - sampled set-spec parity passes
+- Runtime readiness criteria:
+  - `VECTOR_DB_PROVIDER=qdrant` configured for application runtime
+  - Qdrant `/healthz` and embeddings `/health` endpoints healthy
+  - `recent` and `backfill` smoke workflows pass against Qdrant runtime path
+- Operational safety criteria:
+  - rollback plan documented (retain PostgreSQL runtime compatibility until
+    cutover sign-off)
+  - Qdrant backup/restore procedure validated before final Postgres teardown
+  - CI workflow for branch or release commit is green before final cutover
 
 ---
 
