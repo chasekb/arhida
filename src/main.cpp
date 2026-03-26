@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "config/Config.h"
-#include "db/Database.h"
 #include "db/QdrantStorage.h"
 #include "db/StorageEngine.h"
 #include "embedding/EmbeddingClient.h"
@@ -73,15 +72,14 @@ int main(int argc, char **argv) {
       spdlog::info("Embeddings service health check passed");
     }
 
-    // Initialize storage backend
-    std::unique_ptr<StorageEngine> storage;
-    if (config.getVectorDbProvider() == "qdrant") {
-      spdlog::info("Using Qdrant storage backend");
-      storage = std::make_unique<QdrantStorage>();
-    } else {
-      spdlog::info("Using PostgreSQL storage backend");
-      storage = std::make_unique<Database>();
+    if (config.getVectorDbProvider() != "qdrant") {
+      throw std::runtime_error(
+          "Unsupported VECTOR_DB_PROVIDER for app runtime. Expected: qdrant");
     }
+
+    // Runtime cutover: app now runs on Qdrant persistence only.
+    std::unique_ptr<StorageEngine> storage = std::make_unique<QdrantStorage>();
+    spdlog::info("Using Qdrant storage backend");
 
     storage->connect();
 

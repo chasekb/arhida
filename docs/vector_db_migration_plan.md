@@ -1708,7 +1708,7 @@ Current implementation details for Phase 15 failure validation progress:
 - [x] Define go-live criteria
 - [ ] Run historical migration if in scope
 - [ ] Validate parity against PostgreSQL
-- [ ] Switch primary runtime persistence to Qdrant
+- [x] Switch primary runtime persistence to Qdrant
 - [x] Disable or remove PostgreSQL dependency from normal runtime path
 - [ ] Remove `libpq` from the main application build if no longer needed
 - [ ] Remove obsolete Postgres-only documentation
@@ -1745,6 +1745,10 @@ Current implementation details for Phase 17 progress:
   orchestration.
 - `README.md` updated to reflect PostgreSQL is migration-tooling-only and that
   normal compose runtime executes on Qdrant + embeddings.
+- `src/main.cpp` runtime bootstrap now enforces
+  `VECTOR_DB_PROVIDER=qdrant` and fails fast for non-Qdrant app runtime
+  providers, while initializing `QdrantStorage` as the primary runtime
+  persistence backend.
 
 ---
 
