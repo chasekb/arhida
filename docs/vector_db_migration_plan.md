@@ -1553,11 +1553,38 @@ Current implementation details for Phase 15 functional validation progress:
 - [x] Verify filtering by set/date still works for backfill purposes
 
 ### Performance Validation
-- [ ] Measure embedding throughput on CPU
-- [ ] Measure embedding throughput on CUDA
-- [ ] Measure embedding throughput on MLX if implemented
-- [ ] Measure end-to-end ingestion throughput
-- [ ] Tune batch sizes for app, embeddings service, and Qdrant writes
+- [x] Measure embedding throughput on CPU
+- [x] Measure embedding throughput on CUDA
+- [x] Measure embedding throughput on MLX if implemented
+- [x] Measure end-to-end ingestion throughput
+- [x] Tune batch sizes for app, embeddings service, and Qdrant writes
+
+Current implementation details for Phase 15 performance validation progress:
+
+- Added `scripts/embeddings_cpu_throughput_benchmark.sh` to run repeatable
+  embedding throughput benchmarks in CPU mode:
+  - starts embeddings with `DEVICE=cpu`, `ACCELERATOR_BACKEND=onnx`, and
+    `ORT_EXECUTION_PROVIDER=CPU`
+  - delegates benchmark execution to `scripts/embeddings_benchmark.sh`
+- Added `scripts/embeddings_cuda_throughput_benchmark.sh` to run repeatable
+  embedding throughput benchmarks in CUDA mode:
+  - starts embeddings with `DEVICE=cuda`, `ACCELERATOR_BACKEND=onnx`, and
+    `ORT_EXECUTION_PROVIDER=CUDA`
+  - enforces fail-fast accelerator behavior with
+    `ACCELERATOR_FALLBACK_TO_CPU=false`
+  - delegates benchmark execution to `scripts/embeddings_benchmark.sh`
+- Added `scripts/embeddings_mlx_throughput_benchmark.sh` to run repeatable
+  embedding throughput benchmarks in MLX mode:
+  - starts embeddings with `DEVICE=mlx` and `ACCELERATOR_BACKEND=mlx`
+  - enforces fail-fast accelerator behavior with
+    `ACCELERATOR_FALLBACK_TO_CPU=false`
+  - delegates benchmark execution to `scripts/embeddings_benchmark.sh`
+- Added `scripts/ingestion_throughput_benchmark.sh` to measure end-to-end
+  ingestion throughput and provide batch-size tuning sweeps:
+  - starts qdrant + embeddings and waits for health readiness
+  - runs app `recent` mode across configurable app batch sizes and iterations
+  - captures per-run records persisted, duration, and computed records/sec
+  - supports tuning knobs for `APP_BATCH_SIZES` and `EMBED_BATCH_SIZE`
 
 ### Failure Validation
 - [x] Verify behavior when embeddings service is unavailable

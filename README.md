@@ -366,6 +366,30 @@ Backfill-mode end-to-end smoke check (verifies compose-backed `backfill` mode pe
 bash scripts/backfill_mode_e2e_smoke.sh
 ```
 
+Embeddings CPU throughput benchmark (starts embeddings in CPU mode and runs representative batch-size latency benchmark sweep):
+
+```bash
+bash scripts/embeddings_cpu_throughput_benchmark.sh
+```
+
+Embeddings CUDA throughput benchmark (starts embeddings in CUDA mode and runs representative batch-size latency benchmark sweep):
+
+```bash
+bash scripts/embeddings_cuda_throughput_benchmark.sh
+```
+
+Embeddings MLX throughput benchmark (starts embeddings in MLX mode and runs representative batch-size latency benchmark sweep):
+
+```bash
+bash scripts/embeddings_mlx_throughput_benchmark.sh
+```
+
+End-to-end ingestion throughput benchmark (runs `recent` ingestion with configurable app/embed batch-size sweep and reports records/sec):
+
+```bash
+bash scripts/ingestion_throughput_benchmark.sh
+```
+
 ## Project Structure
 
 ```
