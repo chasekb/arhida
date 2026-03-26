@@ -1494,7 +1494,7 @@ Current implementation details for remaining Phase 12 mode validation:
 - [x] Verify Qdrant starts and persists data
 - [x] Verify embeddings service starts and reports healthy
 - [x] Verify app starts only when dependencies are ready
-- [ ] Verify one record can be harvested, embedded, and stored successfully
+- [x] Verify one record can be harvested, embedded, and stored successfully
 - [ ] Verify batch ingestion works
 - [ ] Verify recent mode works end to end
 - [ ] Verify backfill mode works end to end
@@ -1520,6 +1520,11 @@ Current implementation details for Phase 15 functional validation progress:
   - verifies startup failure output includes dependency-readiness failure signals
   - starts dependencies, waits for both health endpoints, and verifies app
     startup command succeeds
+- Added `scripts/one_record_ingest_smoke.sh` to validate one-record ingestion
+  flow through the full runtime path:
+  - starts qdrant + embeddings and waits for both health endpoints
+  - runs app `recent` mode with constrained harvest settings (`ARXIV_BATCH_SIZE=1`)
+  - validates Qdrant point count endpoint returns at least one stored point
 
 ### Data Validation
 - [x] Verify vector dimension matches configured collection dimension

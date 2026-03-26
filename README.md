@@ -342,6 +342,12 @@ App dependency readiness smoke check (verifies app startup fails without qdrant/
 bash scripts/app_dependency_readiness_smoke.sh
 ```
 
+One-record ingest smoke check (verifies at least one record is harvested, embedded, and persisted to Qdrant in `recent` mode):
+
+```bash
+bash scripts/one_record_ingest_smoke.sh
+```
+
 ## Project Structure
 
 ```
