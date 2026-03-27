@@ -10,7 +10,9 @@ PARITY_SAMPLE_SIZE="${PARITY_SAMPLE_SIZE:-25}"
 RESUME="${RESUME:-true}"
 
 echo "[migration] building arhida-migrate target in ${BUILD_DIR}"
-cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" -DBUILD_MIGRATION_TOOL=ON >/dev/null
+cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" \
+  -DBUILD_MIGRATION_TOOL=ON \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 >/dev/null
 cmake --build "${BUILD_DIR}" --target arhida-migrate >/dev/null
 
 ARGS=(

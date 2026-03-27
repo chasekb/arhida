@@ -1131,16 +1131,28 @@ This section breaks the migration into checkable implementation phases.
 
 ## Phase 0: Design and Readiness
 
-- [ ] Confirm Qdrant as the target vector database
-- [ ] Confirm the local embeddings-service architecture is the intended target
-- [ ] Confirm the initial embedding model name and vector dimension
-- [ ] Confirm the initial embedding text format for each arXiv record
-- [ ] Confirm whether additional arXiv metadata formats (`arXiv`, `arXivRaw`) will be harvested in phase 1 or deferred
-- [ ] Confirm whether historical PostgreSQL migration is in scope for the first release
-- [ ] Confirm target deployment environments:
-  - [ ] Linux CPU
-  - [ ] Linux NVIDIA GPU / CUDA
-  - [ ] macOS Apple Silicon / MLX
+- [x] Confirm Qdrant as the target vector database
+- [x] Confirm the local embeddings-service architecture is the intended target
+- [x] Confirm the initial embedding model name and vector dimension
+- [x] Confirm the initial embedding text format for each arXiv record
+- [x] Confirm whether additional arXiv metadata formats (`arXiv`, `arXivRaw`) will be harvested in phase 1 or deferred
+- [x] Confirm whether historical PostgreSQL migration is in scope for the first release
+- [x] Confirm target deployment environments:
+  - [x] Linux CPU
+  - [x] Linux NVIDIA GPU / CUDA
+  - [x] macOS Apple Silicon / MLX
+
+Current decision summary for Phase 0:
+
+- Vector DB target is **Qdrant** for primary runtime persistence.
+- Embeddings architecture target is a **dedicated local embeddings service**.
+- Initial model + dimension are pinned to **`bge-small-en-v1.5` @ `384`**.
+- Initial embedding text format is pinned to canonical:
+  `Title / Subjects / Description` (deterministic ordering + whitespace normalization).
+- Expanded metadata harvesting (`arXiv`, `arXivRaw`) is **deferred** (Phase 13).
+- Historical PostgreSQL migration is **in scope** via `arhida-migrate` +
+  `scripts/postgres_to_qdrant_migration.sh`.
+- Target environments are confirmed: Linux CPU, Linux CUDA, and Apple Silicon MLX.
 
 ## Phase 1: Docker Compose and Runtime Topology
 
@@ -1267,7 +1279,7 @@ Current implementation details for Phase 6 foundation:
 
 ## Phase 7: Model Artifact and Tokenizer Management
 
-- [ ] Choose the initial exported model artifact format
+- [x] Choose the initial exported model artifact format
 - [ ] Prepare ONNX model files for the selected embedding model
 - [ ] Prepare tokenizer assets for the selected embedding model
 - [x] Define mounted model directory layout under `/models`
@@ -1276,6 +1288,9 @@ Current implementation details for Phase 6 foundation:
 - [x] Decide how model upgrades/rollbacks will be handled operationally
 
 Current implementation details for Phase 7 progress:
+
+- Initial artifact format is pinned to **ONNX model artifact + tokenizer assets**
+  (`tokenizer.json`-based directory) mounted under `/models`.
 
 - `EmbeddingServiceConfig` now includes explicit artifact paths:
   - `MODEL_PATH` (default: `/models/bge-small-en-v1.5/model.onnx`)
