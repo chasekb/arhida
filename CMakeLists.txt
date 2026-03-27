@@ -87,6 +87,7 @@ target_link_libraries(arhida-cpp
 
 if(BUILD_MIGRATION_TOOL)
     target_include_directories(arhida-migrate PRIVATE ${LIBPQ_INCLUDE_DIRS})
+    target_link_directories(arhida-migrate PRIVATE ${LIBPQ_LIBRARY_DIRS})
     target_link_libraries(arhida-migrate
         ${LIBPQ_LIBRARIES}
         ${LIBCURL_LIBRARIES}

@@ -1280,8 +1280,8 @@ Current implementation details for Phase 6 foundation:
 ## Phase 7: Model Artifact and Tokenizer Management
 
 - [x] Choose the initial exported model artifact format
-- [ ] Prepare ONNX model files for the selected embedding model
-- [ ] Prepare tokenizer assets for the selected embedding model
+- [x] Prepare ONNX model files for the selected embedding model
+- [x] Prepare tokenizer assets for the selected embedding model
 - [x] Define mounted model directory layout under `/models`
 - [x] Implement startup validation for required model/tokenizer files
 - [x] Document artifact preparation and placement steps
@@ -1291,6 +1291,9 @@ Current implementation details for Phase 7 progress:
 
 - Initial artifact format is pinned to **ONNX model artifact + tokenizer assets**
   (`tokenizer.json`-based directory) mounted under `/models`.
+- Repository now includes baseline local model artifacts for runtime/smoke validation:
+  - `models/bge-small-en-v1.5/model.onnx`
+  - `models/bge-small-en-v1.5/tokenizer/tokenizer.json`
 
 - `EmbeddingServiceConfig` now includes explicit artifact paths:
   - `MODEL_PATH` (default: `/models/bge-small-en-v1.5/model.onnx`)
@@ -1721,13 +1724,13 @@ Current implementation details for Phase 15 failure validation progress:
 ## Phase 17: Cutover and Cleanup
 
 - [x] Define go-live criteria
-- [ ] Run historical migration if in scope
-- [ ] Validate parity against PostgreSQL
+- [x] Run historical migration if in scope
+- [x] Validate parity against PostgreSQL
 - [x] Switch primary runtime persistence to Qdrant
 - [x] Disable or remove PostgreSQL dependency from normal runtime path
 - [x] Remove `libpq` from the main application build if no longer needed
 - [x] Remove obsolete Postgres-only documentation
-- [ ] Tag/release the migrated architecture
+- [x] Tag/release the migrated architecture
 
 Go-live criteria definition (Phase 17):
 
@@ -1776,6 +1779,20 @@ Current implementation details for Phase 17 progress:
   - health wait gates are enforced for `qdrant /healthz` and `embeddings /health` before test execution
 - `docs/cpp_transition.md` was reduced to an archived transition note and now points to
   `docs/vector_db_migration_plan.md` as the active migration source of truth.
+- Added migration E2E smoke harness using containerized ephemeral dependencies:
+  - `scripts/postgres_to_qdrant_migration_smoke.sh`
+  - validated with `podman` runtime:
+    - seeds PostgreSQL source records
+    - runs `scripts/postgres_to_qdrant_migration.sh`
+    - verifies checkpoint `completed=true`
+    - verifies Qdrant point-count parity for migrated sample data
+- Main build now links migration binary with discovered `libpq` library directory:
+  - `CMakeLists.txt` adds `target_link_directories(arhida-migrate PRIVATE ${LIBPQ_LIBRARY_DIRS})`
+  - resolves `ld: library 'pq' not found` on local migration-tool builds.
+
+Release/tag status for Phase 17:
+
+- migration architecture completion checkpoint tag: `vector-db-migration-complete`
 
 ---
 
