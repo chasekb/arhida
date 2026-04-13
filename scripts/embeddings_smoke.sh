@@ -13,12 +13,13 @@ for _ in $(seq 1 30); do
 done
 
 HEALTH_RESPONSE="$(curl -fsS "${EMBEDDINGS_URL}/health")"
+export HEALTH_RESPONSE
 
-MODEL_NAME="$(python3 - <<'PY' <<<"${HEALTH_RESPONSE}"
+MODEL_NAME="$(python3 - <<'PY'
 import json
-import sys
+import os
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["HEALTH_RESPONSE"])
 if not payload.get("ok"):
     raise SystemExit("health check failed: ok=false")
 if not payload.get("warmup_complete", False):
@@ -37,13 +38,14 @@ echo "[smoke] embeddings service healthy (model=${MODEL_NAME})"
 EMBED_RESPONSE="$(curl -fsS -X POST "${EMBEDDINGS_URL}/embed" \
   -H "Content-Type: application/json" \
   -d '{"inputs": ["first smoke text", "second smoke text"]}')"
+export EMBED_RESPONSE
 
-python3 - <<'PY' <<<"${EMBED_RESPONSE}"
+python3 - <<'PY'
 import json
 import math
-import sys
+import os
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["EMBED_RESPONSE"])
 vectors = payload.get("vectors", [])
 dimension = payload.get("dimension")
 
@@ -68,12 +70,13 @@ PY
 DETERMINISM_RESPONSE="$(curl -fsS -X POST "${EMBEDDINGS_URL}/embed" \
   -H "Content-Type: application/json" \
   -d '{"inputs": ["determinism probe", "determinism probe"]}')"
+export DETERMINISM_RESPONSE
 
-python3 - <<'PY' <<<"${DETERMINISM_RESPONSE}"
+python3 - <<'PY'
 import json
-import sys
+import os
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["DETERMINISM_RESPONSE"])
 vectors = payload.get("vectors", [])
 
 if len(vectors) != 2:
@@ -88,12 +91,13 @@ PY
 PREPROCESS_RESPONSE="$(curl -fsS -X POST "${EMBEDDINGS_URL}/embed" \
   -H "Content-Type: application/json" \
   -d '{"inputs": ["tokenization   check", "tokenization check", "tokenization different"]}')"
+export PREPROCESS_RESPONSE
 
-python3 - <<'PY' <<<"${PREPROCESS_RESPONSE}"
+python3 - <<'PY'
 import json
-import sys
+import os
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["PREPROCESS_RESPONSE"])
 vectors = payload.get("vectors", [])
 
 if len(vectors) != 3:

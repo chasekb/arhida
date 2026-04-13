@@ -55,7 +55,8 @@ std::string EmbeddingTextBuilder::joinValues(const std::vector<std::string> &val
                                              const std::string &delimiter) {
   std::ostringstream joined;
   for (size_t i = 0; i < values.size(); ++i) {
-    joined << values[i];
+    const std::string normalized = normalizeWhitespace(values[i]);
+    joined << normalized;
     if (i + 1 < values.size()) {
       joined << delimiter;
     }

@@ -20,12 +20,13 @@ for _ in $(seq 1 90); do
 done
 
 HEALTH_PAYLOAD="$(curl -fsS "${EMBEDDINGS_URL}")"
+export HEALTH_PAYLOAD
 
-python3 - <<'PY' <<<"${HEALTH_PAYLOAD}"
+python3 - <<'PY'
 import json
-import sys
+import os
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["HEALTH_PAYLOAD"])
 
 if payload.get("ok") is not True:
     raise SystemExit("health verification failed: ok != true")

@@ -468,6 +468,144 @@ std::vector<Record> Database::fetchRecordsChunk(std::size_t limit,
   return records;
 }
 
+std::vector<std::pair<std::size_t, Record>>
+Database::fetchRecordsChunkAfterId(std::size_t limit,
+                                   std::size_t last_row_id) const {
+  if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
+    throw std::runtime_error(
+        "Cannot fetch PostgreSQL chunk by row id: connection is not available");
+  }
+
+  if (limit == 0) {
+    return {};
+  }
+
+  Config &config = Config::instance();
+  const std::string schema = config.getPostgresSchema();
+  const std::string table = config.getPostgresTable();
+
+  const std::string query = R"(
+    SELECT
+      id,
+      header_identifier,
+      COALESCE(header_datestamp::text, ''),
+      COALESCE(header_setSpecs::text, '[]'),
+      COALESCE(metadata_creator::text, '[]'),
+      COALESCE(metadata_date::text, '[]'),
+      COALESCE(metadata_description, ''),
+      COALESCE(metadata_identifier::text, '[]'),
+      COALESCE(metadata_subject::text, '[]'),
+      COALESCE(metadata_title::text, '[]'),
+      COALESCE(metadata_type, '')
+    FROM )" +
+                            schema + "." + table + R"(
+    WHERE id > $1::bigint
+    ORDER BY id ASC
+    LIMIT $2::bigint
+  )";
+
+  const std::string last_row_id_text = std::to_string(last_row_id);
+  const std::string limit_text = std::to_string(limit);
+  const char *param_values[2] = {last_row_id_text.c_str(), limit_text.c_str()};
+
+  PGresult *res =
+      PQexecParams(conn_, query.c_str(), 2, nullptr, param_values, nullptr,
+                   nullptr, 0);
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    const std::string error = PQerrorMessage(conn_);
+    PQclear(res);
+    throw std::runtime_error(
+        "Failed to fetch PostgreSQL records chunk by row id: " + error);
+  }
+
+  const int rows = PQntuples(res);
+  std::vector<std::pair<std::size_t, Record>> records;
+  records.reserve(static_cast<std::size_t>(rows));
+
+  for (int row = 0; row < rows; ++row) {
+    Record record;
+    record.header_identifier = PQgetvalue(res, row, 1);
+    record.header_datestamp = PQgetvalue(res, row, 2);
+    record.header_setSpecs = parseJsonArrayText(PQgetvalue(res, row, 3));
+    record.metadata_creator = parseJsonArrayText(PQgetvalue(res, row, 4));
+    record.metadata_date = parseJsonArrayText(PQgetvalue(res, row, 5));
+    record.metadata_description = PQgetvalue(res, row, 6);
+    record.metadata_identifier = parseJsonArrayText(PQgetvalue(res, row, 7));
+    record.metadata_subject = parseJsonArrayText(PQgetvalue(res, row, 8));
+    record.metadata_title = parseJsonArrayText(PQgetvalue(res, row, 9));
+    record.metadata_type = PQgetvalue(res, row, 10);
+
+    std::size_t row_id = 0;
+    try {
+      row_id = static_cast<std::size_t>(
+          std::stoull(std::string(PQgetvalue(res, row, 0))));
+    } catch (...) {
+      PQclear(res);
+      throw std::runtime_error(
+          "Failed to parse PostgreSQL row id while fetching migration chunk");
+    }
+
+    records.emplace_back(row_id, std::move(record));
+  }
+
+  PQclear(res);
+  return records;
+}
+
+std::size_t Database::rowIdForOffset(std::size_t offset) const {
+  if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
+    throw std::runtime_error(
+        "Cannot resolve PostgreSQL row id for offset: connection is not available");
+  }
+
+  if (offset == 0) {
+    return 0;
+  }
+
+  Config &config = Config::instance();
+  const std::string schema = config.getPostgresSchema();
+  const std::string table = config.getPostgresTable();
+
+  const std::string query = R"(
+    SELECT id
+    FROM )" +
+                            schema + "." + table + R"(
+    ORDER BY id ASC
+    LIMIT 1
+    OFFSET $1::bigint
+  )";
+
+  const std::string indexed_offset = std::to_string(offset - 1);
+  const char *param_values[1] = {indexed_offset.c_str()};
+
+  PGresult *res = PQexecParams(conn_, query.c_str(), 1, nullptr, param_values,
+                               nullptr, nullptr, 0);
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    const std::string error = PQerrorMessage(conn_);
+    PQclear(res);
+    throw std::runtime_error(
+        "Failed to resolve PostgreSQL row id for offset: " + error);
+  }
+
+  if (PQntuples(res) == 0 || PQgetisnull(res, 0, 0)) {
+    PQclear(res);
+    return 0;
+  }
+
+  std::size_t row_id = 0;
+  try {
+    row_id =
+        static_cast<std::size_t>(std::stoull(std::string(PQgetvalue(res, 0, 0))));
+  } catch (...) {
+    PQclear(res);
+    throw std::runtime_error(
+        "Failed to parse PostgreSQL row id for migration offset bridge");
+  }
+
+  PQclear(res);
+  return row_id;
+}
+
 std::size_t Database::countRecords() const {
   if (!conn_ || PQstatus(conn_) != CONNECTION_OK) {
     throw std::runtime_error(

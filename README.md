@@ -40,7 +40,7 @@ Primary runtime variables:
 | `QDRANT_COLLECTION` | `arxiv_metadata` | Qdrant collection |
 | `VECTOR_SIZE` | `384` | Embedding/vector dimension |
 | `EMBEDDING_SERVICE_URL` | `http://embeddings:8000` | Embedding service URL |
-| `EMBEDDING_MODEL_NAME` | `bge-small-en-v1.5` | Embedding model identifier |
+| `EMBEDDING_MODEL_NAME` | `BAAI/bge-small-en-v1.5` | Embedding model identifier |
 | `EMBEDDING_REQUEST_TIMEOUT_MS` | `30000` | Embed request timeout |
 | `EMBEDDING_MAX_BATCH_SIZE` | `64` | Max embedding batch size |
 | `EMBEDDING_RETRY_COUNT` | `3` | Embed retry count |
@@ -210,6 +210,53 @@ Current migration posture:
 3. Backfill and recent runs write vectors + payloads into Qdrant.
 4. Execute historical PostgreSQL migration utility when legacy data migration is needed.
 5. Verify data parity/coverage before final PostgreSQL decommission steps.
+
+### High-Impact Migration Mode (Keyset + C++ Embeddings)
+
+`scripts/postgres_to_qdrant_migration.sh` now supports migration-optimized behavior:
+
+- keyset pagination (`id > last_row_id`) in migrator read path
+- checkpoint resume with both `offset` and `last_row_id`
+- optional C++ embeddings service launched via Podman container (`USE_CPP_EMBEDDINGS_SERVICE=true`)
+
+Recommended migration invocation:
+
+```bash
+POSTGRES_SCHEMA=priority_queue \
+POSTGRES_TABLE=arxiv \
+QDRANT_URL=http://127.0.0.1:7633 \
+QDRANT_COLLECTION=arxiv_metadata_from_postgres_YYYYMMDD \
+CHECKPOINT_FILE=.migration/postgres_to_qdrant_checkpoint.json \
+USE_CPP_EMBEDDINGS_SERVICE=true \
+CPP_EMBEDDINGS_URL=http://127.0.0.1:18000 \
+CHUNK_SIZE=400 \
+EMBEDDING_BATCH_SIZE=64 \
+RESUME=true \
+bash scripts/postgres_to_qdrant_migration.sh
+```
+
+### Running Against a Quiesced Source PostgreSQL
+
+For maximum throughput and deterministic runtime, migrate from a quiesced source snapshot:
+
+1. Stop/suspend writers to `POSTGRES_SCHEMA.POSTGRES_TABLE`.
+2. Validate row count stability before migration:
+
+```bash
+psql "postgresql://<user>:<pass>@<host>:<port>/<db>" \
+  -c "SELECT COUNT(*) FROM priority_queue.arxiv;"
+```
+
+3. Run migration with checkpoint + keyset mode enabled (default in current migrator implementation).
+4. Re-check source count and compare with Qdrant point count:
+
+```bash
+curl -sS http://127.0.0.1:7633/collections/<collection>/points/count \
+  -H 'Content-Type: application/json' \
+  --data '{"exact":true}'
+```
+
+5. If parity passes, re-enable normal write workflows.
 
 ## Backup and Restore (Qdrant Storage)
 

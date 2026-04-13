@@ -61,6 +61,10 @@ int PostgresToQdrantMigrator::run() {
     state = CheckpointState{};
   }
 
+  if (state.last_row_id == 0 && state.offset > 0) {
+    state.last_row_id = postgres.rowIdForOffset(state.offset);
+  }
+
   if (state.completed && state.offset >= total_source_records) {
     spdlog::info("Migration checkpoint is already marked completed.");
     const bool parity_ok = runParityValidation(options_.parity_sample_size);
@@ -73,15 +77,23 @@ int PostgresToQdrantMigrator::run() {
 
   spdlog::info(
       "Starting PostgreSQL -> Qdrant migration (source_total={}, resume={}, "
-      "offset={}, chunk_size={}, embed_batch_size={})",
-      total_source_records, options_.resume, state.offset, chunk_size,
-      embed_batch_size);
+      "offset={}, last_row_id={}, chunk_size={}, embed_batch_size={})",
+      total_source_records, options_.resume, state.offset, state.last_row_id,
+      chunk_size, embed_batch_size);
 
   while (state.offset < total_source_records) {
-    auto records = postgres.fetchRecordsChunk(chunk_size, state.offset);
-    if (records.empty()) {
+    auto chunk = postgres.fetchRecordsChunkAfterId(chunk_size, state.last_row_id);
+    if (chunk.empty()) {
       break;
     }
+
+    std::vector<Record> records;
+    records.reserve(chunk.size());
+    for (auto &entry : chunk) {
+      records.push_back(std::move(entry.second));
+    }
+
+    const std::size_t chunk_last_row_id = chunk.back().first;
 
     std::vector<std::string> embedding_inputs;
     embedding_inputs.reserve(records.size());
@@ -107,6 +119,7 @@ int PostgresToQdrantMigrator::run() {
     qdrant.upsertRecordsBatch(records, embeddings);
 
     state.offset += records.size();
+    state.last_row_id = chunk_last_row_id;
     state.migrated_records += records.size();
     const std::string last_identifier = records.back().header_identifier;
     persistCheckpoint(state, last_identifier);
@@ -159,6 +172,7 @@ PostgresToQdrantMigrator::loadCheckpoint() const {
   }
 
   state.offset = payload.value("offset", static_cast<std::size_t>(0));
+  state.last_row_id = payload.value("last_row_id", static_cast<std::size_t>(0));
   state.migrated_records =
       payload.value("migrated_records", static_cast<std::size_t>(0));
   state.completed = payload.value("completed", false);
@@ -183,6 +197,7 @@ void PostgresToQdrantMigrator::persistCheckpoint(
 
   json payload = {
       {"offset", state.offset},
+      {"last_row_id", state.last_row_id},
       {"migrated_records", state.migrated_records},
       {"completed", state.completed},
       {"last_identifier", last_identifier},

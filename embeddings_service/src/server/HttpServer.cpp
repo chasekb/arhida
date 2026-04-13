@@ -16,8 +16,7 @@ using json = nlohmann::json;
 
 drogon::HttpResponsePtr buildJsonResponse(const json &payload,
                                           drogon::HttpStatusCode status) {
-  auto response =
-      drogon::HttpResponse::newHttpResponse(drogon::HttpResponse::k200OK);
+  auto response = drogon::HttpResponse::newHttpResponse();
   response->setStatusCode(status);
   response->setContentTypeCode(drogon::CT_APPLICATION_JSON);
   response->setBody(payload.dump());

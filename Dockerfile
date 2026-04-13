@@ -5,6 +5,7 @@
 ARG BUILD_DATE
 ARG VERSION=main
 ARG REVISION=unknown
+ARG BUILD_MIGRATION_TOOL=ON
 
 # Stage 1: Builder
 FROM debian:bookworm-slim AS builder
@@ -33,7 +34,8 @@ RUN mkdir -p build
 RUN cmake -B build -S . \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/local \
-    -DBUILD_TESTS=ON
+    -DBUILD_TESTS=ON \
+    -DBUILD_MIGRATION_TOOL=${BUILD_MIGRATION_TOOL}
 
 # Build
 RUN cmake --build build -j$(nproc)
@@ -59,6 +61,7 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /usr/local/bin/arhida-cpp .
+COPY --from=builder /usr/local/bin/arhida-migrate .
 
 # Copy source files (headers, config) for potential runtime needs
 COPY --from=builder /build/include/ ./include/

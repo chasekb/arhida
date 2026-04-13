@@ -92,14 +92,14 @@ curl -fsS -X PUT "${QDRANT_URL}/collections/${COLLECTION}/points" \
 FILTER_RESPONSE="$(curl -fsS -X POST "${QDRANT_URL}/collections/${COLLECTION}/points/scroll" \
   -H "Content-Type: application/json" \
   -d "{\"filter\":{\"must\":[{\"key\":\"header_setSpecs\",\"match\":{\"any\":[\"${TARGET_SET_SPEC}\"]}},{\"key\":\"header_datestamp\",\"range\":{\"gte\":\"${START_DATE}T00:00:00\",\"lte\":\"${END_DATE}T23:59:59\"}}]},\"with_payload\":[\"header_identifier\",\"header_datestamp\",\"header_setSpecs\"],\"with_vector\":false,\"limit\":128}")"
+export FILTER_RESPONSE
 
-python3 - <<'PY' <<<"${FILTER_RESPONSE}"
+python3 - <<'PY'
 import datetime
 import json
 import os
-import sys
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["FILTER_RESPONSE"])
 points = payload.get("result", {}).get("points", [])
 
 if len(points) != 2:

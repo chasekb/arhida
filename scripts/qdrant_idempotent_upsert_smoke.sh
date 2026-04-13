@@ -123,12 +123,13 @@ curl -fsS -X PUT "${QDRANT_URL}/collections/${COLLECTION}/points" \
 SCROLL_RESPONSE="$(curl -fsS -X POST "${QDRANT_URL}/collections/${COLLECTION}/points/scroll" \
   -H "Content-Type: application/json" \
   -d '{"limit": 100, "with_payload": true, "with_vector": false}')"
+export SCROLL_RESPONSE
 
-python3 - <<'PY' <<<"${SCROLL_RESPONSE}"
+python3 - <<'PY'
 import json
-import sys
+import os
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["SCROLL_RESPONSE"])
 points = payload.get("result", {}).get("points", [])
 
 if len(points) != 1:

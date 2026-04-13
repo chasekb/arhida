@@ -8,9 +8,10 @@
 
 #include "db/StorageEngine.h"
 #include <cstddef>
-#include <string>
 #include <memory>
 #include <libpq-fe.h>
+#include <string>
+#include <utility>
 
 class Database : public StorageEngine {
 public:
@@ -34,6 +35,9 @@ public:
                                              const std::string& end_date,
                                              const std::string& set_spec) override;
     std::vector<Record> fetchRecordsChunk(std::size_t limit, std::size_t offset) const;
+    std::vector<std::pair<std::size_t, Record>>
+    fetchRecordsChunkAfterId(std::size_t limit, std::size_t last_row_id) const;
+    std::size_t rowIdForOffset(std::size_t offset) const;
     std::size_t countRecords() const;
     std::size_t countRecordsForDate(const std::string& date) const;
     std::size_t countRecordsForSetSpec(const std::string& set_spec) const;

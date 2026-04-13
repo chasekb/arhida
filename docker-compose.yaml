@@ -19,7 +19,7 @@ services:
 
       # Embeddings service configuration
       - EMBEDDING_SERVICE_URL=${EMBEDDING_SERVICE_URL:-http://embeddings:8000}
-      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-bge-small-en-v1.5}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}
       - EMBEDDING_REQUEST_TIMEOUT_MS=${EMBEDDING_REQUEST_TIMEOUT_MS:-30000}
       - EMBEDDING_MAX_BATCH_SIZE=${EMBEDDING_MAX_BATCH_SIZE:-64}
       - EMBEDDING_RETRY_COUNT=${EMBEDDING_RETRY_COUNT:-3}
@@ -62,12 +62,15 @@ services:
       start_period: 10s
 
   embeddings:
-    image: ghcr.io/chasekb/arhida-embeddings:local
+    build:
+      context: .
+      dockerfile: embeddings_service/Dockerfile
+    image: arhida-embeddings:local
     container_name: arhida-embeddings
     ports:
       - "8000:8000"
     environment:
-      - MODEL_NAME=${EMBEDDING_MODEL_NAME:-bge-small-en-v1.5}
+      - MODEL_NAME=${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}
       - MODEL_DIMENSION=${VECTOR_SIZE:-384}
       - MAX_BATCH_SIZE=${EMBEDDING_MAX_BATCH_SIZE:-64}
       - MODEL_PATH=${MODEL_PATH:-/models/bge-small-en-v1.5/model.onnx}
@@ -83,7 +86,7 @@ services:
       - SERVICE_PORT=${SERVICE_PORT:-8000}
       - REQUEST_TIMEOUT_MS=${REQUEST_TIMEOUT_MS:-${EMBEDDING_REQUEST_TIMEOUT_MS:-30000}}
     volumes:
-      - model-files:/models:ro
+      - ./models:/models:ro
     networks:
       - internal_net
     restart: unless-stopped
@@ -101,4 +104,3 @@ networks:
 
 volumes:
   qdrant-storage:
-  model-files:

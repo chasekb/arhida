@@ -26,6 +26,7 @@ public:
 private:
   struct CheckpointState {
     std::size_t offset = 0;
+    std::size_t last_row_id = 0;
     std::size_t migrated_records = 0;
     bool completed = false;
   };

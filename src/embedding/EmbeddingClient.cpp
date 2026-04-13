@@ -6,9 +6,11 @@
 
 #include "embedding/EmbeddingClient.h"
 #include "config/Config.h"
+#include <chrono>
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <thread>
 
 using json = nlohmann::json;
 
@@ -61,20 +63,34 @@ EmbeddingClient::embed(const std::vector<std::string>& inputs) const {
 
   long response_code = 0;
   std::string response;
-  int attempts = 0;
+  std::string last_error;
+  const int max_attempts = std::max(1, retry_count_);
 
-  while (attempts < retry_count_) {
-    response = performRequest("POST", "/embed", request_body.dump(),
-                              &response_code);
-    if (response_code >= 200 && response_code < 300) {
-      break;
+  for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+    try {
+      response =
+          performRequest("POST", "/embed", request_body.dump(), &response_code);
+      if (response_code >= 200 && response_code < 300) {
+        last_error.clear();
+        break;
+      }
+
+      last_error = "Embedding request failed with HTTP status " +
+                   std::to_string(response_code);
+    } catch (const std::exception &e) {
+      last_error = e.what();
     }
-    attempts++;
+
+    if (attempt < max_attempts) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(250 * attempt));
+    }
   }
 
-  if (response_code < 200 || response_code >= 300) {
-    throw std::runtime_error("Embedding request failed with HTTP status " +
-                             std::to_string(response_code));
+  if (response_code < 200 || response_code >= 300 || !last_error.empty()) {
+    throw std::runtime_error("Embedding request failed after retries: " +
+                             (last_error.empty()
+                                  ? ("HTTP status " + std::to_string(response_code))
+                                  : last_error));
   }
 
   auto payload = json::parse(response);

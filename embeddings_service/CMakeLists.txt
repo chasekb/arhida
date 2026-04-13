@@ -20,7 +20,35 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
-find_package(Drogon CONFIG REQUIRED)
+find_package(Drogon CONFIG QUIET)
+if(NOT Drogon_FOUND)
+    # Keep container builds under CI/tooling time budgets by minimizing Drogon
+    # components that are unnecessary for the embeddings runtime binary.
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(BUILD_CTL OFF CACHE BOOL "" FORCE)
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_ORM OFF CACHE BOOL "" FORCE)
+    set(BUILD_BROTLI OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        drogon
+        GIT_REPOSITORY https://github.com/drogonframework/drogon.git
+        GIT_TAG v1.9.7
+    )
+    FetchContent_MakeAvailable(drogon)
+endif()
+
+set(DROGON_LINK_TARGET "")
+if(TARGET Drogon::Drogon)
+    set(DROGON_LINK_TARGET Drogon::Drogon)
+elseif(TARGET drogon)
+    set(DROGON_LINK_TARGET drogon)
+elseif(TARGET Drogon)
+    set(DROGON_LINK_TARGET Drogon)
+else()
+    message(FATAL_ERROR "No Drogon link target found after configuration")
+endif()
+
 find_package(ONNXRuntime CONFIG QUIET)
 
 # ONNX Runtime is intentionally linked as an interface dependency in Phase 6.
@@ -50,7 +78,7 @@ add_executable(arhida-embeddings-service
 target_include_directories(arhida-embeddings-service PRIVATE include)
 
 target_link_libraries(arhida-embeddings-service
-    Drogon::Drogon
+    ${DROGON_LINK_TARGET}
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     onnxruntime_external

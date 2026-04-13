@@ -29,13 +29,13 @@ curl -fsS -X PUT "${QDRANT_URL}/collections/${COLLECTION}" \
   >/dev/null
 
 COLLECTION_INFO="$(curl -fsS "${QDRANT_URL}/collections/${COLLECTION}")"
+export COLLECTION_INFO
 
-python3 - <<'PY' <<<"${COLLECTION_INFO}"
+python3 - <<'PY'
 import json
 import os
-import sys
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["COLLECTION_INFO"])
 configured = payload["result"]["config"]["params"]["vectors"]["size"]
 expected = int(os.environ.get("VECTOR_SIZE", "384"))
 
@@ -85,12 +85,13 @@ curl -fsS -X PUT "${QDRANT_URL}/collections/${COLLECTION}/points" \
 SCROLL_RESPONSE="$(curl -fsS -X POST "${QDRANT_URL}/collections/${COLLECTION}/points/scroll" \
   -H "Content-Type: application/json" \
   -d '{"limit": 1, "with_payload": true, "with_vector": false}')"
+export SCROLL_RESPONSE
 
-python3 - <<'PY' <<<"${SCROLL_RESPONSE}"
+python3 - <<'PY'
 import json
-import sys
+import os
 
-payload = json.loads(sys.stdin.read())
+payload = json.loads(os.environ["SCROLL_RESPONSE"])
 points = payload.get("result", {}).get("points", [])
 if not points:
     raise SystemExit("payload verification failed: no points returned")
