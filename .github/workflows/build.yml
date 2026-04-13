@@ -5,7 +5,8 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - '**'
     tags:
       - 'v*'
   pull_request:
@@ -70,33 +71,118 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     services:
-      test-db:
-        image: postgres:15
-        env:
-          POSTGRES_DB: test
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      qdrant:
+        image: qdrant/qdrant:latest
         ports:
-          - 5432:5432
+          - 6333:6333
     steps:
       - name: Pull image
         run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Start mock embeddings service
+        run: |
+          nohup python3 - <<'PY' >/tmp/mock-embeddings.log 2>&1 &
+          import json
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+
+          DIM = 384
+
+          class Handler(BaseHTTPRequestHandler):
+              def _send(self, code, payload):
+                  body = json.dumps(payload).encode("utf-8")
+                  self.send_response(code)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def log_message(self, format, *args):
+                  return
+
+              def do_GET(self):
+                  if self.path == "/health":
+                      self._send(200, {
+                          "ok": True,
+                          "service": "mock-embeddings",
+                          "model": "bge-small-en-v1.5",
+                          "dimension": DIM,
+                          "warmup_complete": True,
+                      })
+                  else:
+                      self._send(404, {"ok": False, "error": "not_found"})
+
+              def do_POST(self):
+                  if self.path != "/embed":
+                      self._send(404, {"ok": False, "error": "not_found"})
+                      return
+
+                  try:
+                      length = int(self.headers.get("Content-Length", "0"))
+                      payload = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+                  except Exception:
+                      self._send(400, {"ok": False, "error": "invalid_json"})
+                      return
+
+                  inputs = payload.get("inputs", [])
+                  if not isinstance(inputs, list) or any(not isinstance(x, str) for x in inputs):
+                      self._send(400, {"ok": False, "error": "invalid_inputs"})
+                      return
+
+                  vectors = [[0.0] * DIM for _ in inputs]
+                  self._send(200, {
+                      "model": "bge-small-en-v1.5",
+                      "dimension": DIM,
+                      "vectors": vectors,
+                  })
+
+          HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
+          PY
+          echo $! >/tmp/mock-embeddings.pid
+
+      - name: Wait for qdrant health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:6333/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "qdrant health check timed out"
+          exit 1
+
+      - name: Wait for embeddings health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "embeddings health check timed out"
+          exit 1
       
       - name: Run tests
         run: |
           docker run --rm \
             --network host \
-            -e POSTGRES_HOST=127.0.0.1 \
-            -e POSTGRES_DB=test \
-            -e POSTGRES_USER=test \
-            -e POSTGRES_PASSWORD=test \
+            -e VECTOR_DB_PROVIDER=qdrant \
+            -e QDRANT_URL=http://127.0.0.1:6333 \
+            -e QDRANT_COLLECTION=arxiv_metadata_ci \
+            -e VECTOR_SIZE=384 \
+            -e EMBEDDING_SERVICE_URL=http://127.0.0.1:8000 \
+            -e EMBEDDING_MODEL_NAME=bge-small-en-v1.5 \
+            -e EMBEDDING_MAX_BATCH_SIZE=64 \
+            -e EMBEDDING_RETRY_COUNT=2 \
+            -e ARXIV_BATCH_SIZE=5 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
             --mode recent
+
+      - name: Stop mock embeddings service
+        if: always()
+        run: |
+          if [ -f /tmp/mock-embeddings.pid ]; then
+            kill "$(cat /tmp/mock-embeddings.pid)" || true
+          fi
 
   release:
     runs-on: ubuntu-latest

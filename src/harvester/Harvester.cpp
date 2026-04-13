@@ -6,36 +6,38 @@
 
 #include "harvester/Harvester.h"
 #include "config/Config.h"
+#include "embedding/EmbeddingTextBuilder.h"
 #include "utils/Logger.h"
+#include <algorithm>
 #include <chrono>
-#include <nlohmann/json.hpp>
 #include <sstream>
 #include <thread>
+#include <utility>
 
-using json = nlohmann::json;
-
-Harvester::Harvester(Database &db) : db_(db), oai_client_(nullptr) {
+Harvester::Harvester(StorageEngine &db)
+    : db_(db), oai_client_(nullptr), embedding_client_(nullptr) {
   Config &config = Config::instance();
   // Use the correct arXiv OAI-PMH endpoint
   oai_client_ = new OaiClient("https://oaipmh.arxiv.org/oai");
   oai_client_->setRateLimitDelay(config.getRateLimitDelay());
   oai_client_->setMaxRetries(config.getMaxRetries());
+
+  if (config.getVectorDbProvider() == "qdrant") {
+    embedding_client_ = new EmbeddingClient();
+  }
 }
 
 Harvester::~Harvester() {
   if (oai_client_) {
     delete oai_client_;
   }
+  if (embedding_client_) {
+    delete embedding_client_;
+  }
 }
 
-void Harvester::ensureTableExists() {
-  Config &config = Config::instance();
-  std::string schema = config.getPostgresSchema();
-  std::string table = config.getPostgresTable();
-
-  db_.createSchema(schema);
-  db_.createTable(schema, table);
-  db_.createIndexes(schema, table);
+void Harvester::ensureStorageInitialized() {
+  db_.initialize();
 }
 
 int Harvester::harvestRecent(const std::vector<std::string> &set_specs) {
@@ -67,8 +69,8 @@ int Harvester::harvestRecent(const std::vector<std::string> &set_specs) {
 
   spdlog::info("Recent harvest from {} to {}", from_date, until_date);
 
-  // Ensure table exists
-  ensureTableExists();
+  // Ensure storage backend is initialized
+  ensureStorageInitialized();
 
   int total_records = 0;
   int successful_sets = 0;
@@ -119,7 +121,8 @@ int Harvester::harvestBackfill(const std::string &start_date,
                                const std::vector<std::string> &set_specs) {
   Config &config = Config::instance();
 
-  std::string start = start_date.empty() ? "2007-01-01" : start_date;
+  std::string start =
+      start_date.empty() ? config.getBackfillStartDate() : start_date;
   
   // Use current date as default end date instead of hardcoded 2026-01-01
   std::string end;
@@ -139,8 +142,8 @@ int Harvester::harvestBackfill(const std::string &start_date,
 
   spdlog::info("Backfill from {} to {}", start, end);
 
-  // Ensure table exists
-  ensureTableExists();
+  // Ensure storage backend is initialized
+  ensureStorageInitialized();
 
   int total_records = 0;
 
@@ -159,8 +162,9 @@ int Harvester::harvestBackfill(const std::string &start_date,
     spdlog::info("Found {} missing dates for {}", missing_dates.size(),
                  set_spec);
 
-    // Process in chunks of 7 days
-    const size_t chunk_size = 7;
+    // Process in configurable chunks
+    const size_t chunk_size =
+        static_cast<size_t>(std::max(1, config.getBackfillChunkSize()));
     for (size_t i = 0; i < missing_dates.size(); i += chunk_size) {
       size_t end_idx = std::min(i + chunk_size, missing_dates.size());
 
@@ -169,7 +173,6 @@ int Harvester::harvestBackfill(const std::string &start_date,
 
         try {
           // Single day range
-          std::string next_date = date_str; // Would need to add 1 day
           int records = harvestSetSpec(set_spec, date_str, date_str);
 
           if (records > 0) {
@@ -222,105 +225,38 @@ int Harvester::harvestSetSpec(const std::string &set_spec,
 
 void Harvester::insertRecords(const std::vector<Record> &records,
                               const std::string &set_spec) {
-  Config &config = Config::instance();
-  std::string schema = config.getPostgresSchema();
-  std::string table = config.getPostgresTable();
-
-  const std::string upsert_query = R"(
-        INSERT INTO )" + schema + R"(.)" +
-                                   table + R"( (
-            header_datestamp, header_identifier, header_setSpecs,
-            metadata_creator, metadata_date, metadata_description,
-            metadata_identifier, metadata_subject, metadata_title, metadata_type
-        ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-        )
-        ON CONFLICT (header_identifier) 
-        DO UPDATE SET
-            header_datestamp = EXCLUDED.header_datestamp,
-            header_setSpecs = EXCLUDED.header_setSpecs,
-            metadata_creator = EXCLUDED.metadata_creator,
-            metadata_date = EXCLUDED.metadata_date,
-            metadata_description = EXCLUDED.metadata_description,
-            metadata_identifier = EXCLUDED.metadata_identifier,
-            metadata_subject = EXCLUDED.metadata_subject,
-            metadata_title = EXCLUDED.metadata_title,
-            metadata_type = EXCLUDED.metadata_type,
-            updated_at = CURRENT_TIMESTAMP
-    )";
-
   int processed = 0;
 
   for (const auto &record : records) {
+    std::vector<float> embedding;
+
+    if (embedding_client_) {
+      try {
+        std::string embedding_text = EmbeddingTextBuilder::build(record);
+        auto vectors = embedding_client_->embed({embedding_text});
+        if (vectors.empty()) {
+          throw std::runtime_error(
+              "Embeddings service returned no vectors for harvested record");
+        }
+        embedding = std::move(vectors.front());
+      } catch (const std::exception &e) {
+        spdlog::error("Embedding generation failed for record {}: {}",
+                      record.header_identifier, e.what());
+        continue;
+      }
+    }
+
     try {
-      // Convert vectors to JSON
-      json header_setSpecs = json::array();
-      for (const auto &s : record.header_setSpecs) {
-        header_setSpecs.push_back(s);
-      }
-
-      json metadata_creator = json::array();
-      for (const auto &c : record.metadata_creator) {
-        metadata_creator.push_back(c);
-      }
-
-      json metadata_date = json::array();
-      for (const auto &d : record.metadata_date) {
-        metadata_date.push_back(d);
-      }
-
-      json metadata_identifier = json::array();
-      for (const auto &id : record.metadata_identifier) {
-        metadata_identifier.push_back(id);
-      }
-
-      json metadata_subject = json::array();
-      for (const auto &s : record.metadata_subject) {
-        metadata_subject.push_back(s);
-      }
-
-      json metadata_title = json::array();
-      for (const auto &t : record.metadata_title) {
-        metadata_title.push_back(t);
-      }
-
-      // Prepare parameter values
-      const char *param_values[10];
-      std::string p1 = record.header_datestamp;
-      std::string p2 = record.header_identifier;
-      std::string p3 = header_setSpecs.dump();
-      std::string p4 = metadata_creator.dump();
-      std::string p5 = metadata_date.dump();
-      std::string p6 = record.metadata_description;
-      std::string p7 = metadata_identifier.dump();
-      std::string p8 = metadata_subject.dump();
-      std::string p9 = metadata_title.dump();
-      std::string p10 = record.metadata_type;
-
-      param_values[0] = p1.c_str();
-      param_values[1] = p2.c_str();
-      param_values[2] = p3.c_str();
-      param_values[3] = p4.c_str();
-      param_values[4] = p5.c_str();
-      param_values[5] = p6.c_str();
-      param_values[6] = p7.c_str();
-      param_values[7] = p8.c_str();
-      param_values[8] = p9.c_str();
-      param_values[9] = p10.c_str();
-
-      // Note: Full implementation would use PQexecParams for proper
-      // parameterized queries This is a simplified version showing the concept
-
+      db_.upsertRecord(record, embedding);
       processed++;
 
       if (processed % 100 == 0) {
         spdlog::info("Processed {} records in current batch for {}", processed,
                      set_spec);
       }
-
     } catch (const std::exception &e) {
-      spdlog::error("Error inserting record {}: {}", record.header_identifier,
-                    e.what());
+      spdlog::error("Storage upsert failed for record {}: {}",
+                    record.header_identifier, e.what());
     }
   }
 
@@ -331,87 +267,5 @@ std::vector<std::string>
 Harvester::getMissingDates(const std::string &start_date,
                            const std::string &end_date,
                            const std::string &set_spec) {
-  std::vector<std::string> missing_dates;
-  
-  // Parse dates
-  std::tm start_tm = {};
-  std::tm end_tm = {};
-  
-  std::istringstream start_ss(start_date);
-  start_ss >> std::get_time(&start_tm, "%Y-%m-%d");
-  
-  std::istringstream end_ss(end_date);
-  end_ss >> std::get_time(&end_tm, "%Y-%m-%d");
-  
-  if (start_ss.fail() || end_ss.fail()) {
-    spdlog::error("Invalid date format: start={}, end={}", start_date, end_date);
-    return missing_dates;
-  }
-  
-  // Convert to time_t for comparison
-  std::time_t start_time = std::mktime(&start_tm);
-  std::time_t end_time = std::mktime(&end_tm);
-  
-  // If end_date is before start_date, swap them
-  if (end_time < start_time) {
-    std::swap(start_time, end_time);
-    std::swap(start_tm, end_tm);
-  }
-  
-  // Query database for existing dates for this set_spec
-  Config &config = Config::instance();
-  std::string schema = config.getPostgresSchema();
-  std::string table = config.getPostgresTable();
-  
-  // Build query to find existing dates for this set_spec
-  std::string query = R"(
-    SELECT DISTINCT DATE(header_datestamp) as existing_date
-    FROM )" + schema + R"(.)" + table + R"(
-    WHERE header_setSpecs @> '[")" + set_spec + R"("]'
-    AND DATE(header_datestamp) BETWEEN $1::date AND $2::date
-    ORDER BY existing_date
-  )";
-  
-  try {
-    // Prepare parameter values for date range
-    const char *param_values[2];
-    char start_date_str[11], end_date_str[11];
-    strftime(start_date_str, sizeof(start_date_str), "%Y-%m-%d", &start_tm);
-    strftime(end_date_str, sizeof(end_date_str), "%Y-%m-%d", &end_tm);
-    
-    param_values[0] = start_date_str;
-    param_values[1] = end_date_str;
-    
-    // Note: Full implementation would use PQexecParams for proper parameterized queries
-    // This is a simplified version showing the concept
-    
-    // For now, let's generate all dates in the range and assume none exist
-    // This will be replaced with actual database query
-    std::time_t current = start_time;
-    while (current <= end_time) {
-      std::tm *current_tm = std::localtime(&current);
-      char date_str[11];
-      strftime(date_str, sizeof(date_str), "%Y-%m-%d", current_tm);
-      missing_dates.push_back(date_str);
-      
-      // Add one day
-      current += 24 * 3600;
-    }
-    
-    spdlog::info("Generated {} dates to check for set_spec: {}", missing_dates.size(), set_spec);
-    
-  } catch (const std::exception &e) {
-    spdlog::error("Error querying database for missing dates: {}", e.what());
-    // Fallback: return all dates in range
-    std::time_t current = start_time;
-    while (current <= end_time) {
-      std::tm *current_tm = std::localtime(&current);
-      char date_str[11];
-      strftime(date_str, sizeof(date_str), "%Y-%m-%d", current_tm);
-      missing_dates.push_back(date_str);
-      current += 24 * 3600;
-    }
-  }
-  
-  return missing_dates;
+  return db_.getMissingDates(start_date, end_date, set_spec);
 }

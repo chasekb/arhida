@@ -5,20 +5,24 @@ services:
   app:
     image: ghcr.io/chasekb/arhida:latest
     container_name: arhida-cpp
+    depends_on:
+      qdrant:
+        condition: service_started
+      embeddings:
+        condition: service_started
     environment:
-      # Database (using external PostgreSQL or local)
-      - POSTGRES_HOST=${POSTGRES_HOST:-db-postgres}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_SCHEMA=${POSTGRES_SCHEMA}
-      - POSTGRES_TABLE=${POSTGRES_TABLE}
+      # Vector database configuration
+      - VECTOR_DB_PROVIDER=qdrant
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-arxiv_metadata}
+      - VECTOR_SIZE=${VECTOR_SIZE:-384}
 
-      # Docker secrets (alternative)
-      - DOCKER_POSTGRES_HOST=db-postgres
-      - DOCKER_POSTGRES_USER_FILE=/run/secrets/postgres-u
-      - DOCKER_POSTGRES_PASSWORD_FILE=/run/secrets/postgres-p
+      # Embeddings service configuration
+      - EMBEDDING_SERVICE_URL=${EMBEDDING_SERVICE_URL:-http://embeddings:8000}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}
+      - EMBEDDING_REQUEST_TIMEOUT_MS=${EMBEDDING_REQUEST_TIMEOUT_MS:-30000}
+      - EMBEDDING_MAX_BATCH_SIZE=${EMBEDDING_MAX_BATCH_SIZE:-64}
+      - EMBEDDING_RETRY_COUNT=${EMBEDDING_RETRY_COUNT:-3}
 
       # Application settings
       - ARXIV_RATE_LIMIT_DELAY=${ARXIV_RATE_LIMIT_DELAY:-3}
@@ -29,10 +33,7 @@ services:
       - ./logs:/app/logs
       - ./config:/app/config:ro
     networks:
-      - db_prdnet
-    secrets:
-      - postgres-u
-      - postgres-p
+      - internal_net
     restart: unless-stopped
 
     # Health check
@@ -43,12 +44,63 @@ services:
       retries: 3
       start_period: 10s
 
-secrets:
-  postgres-u:
-    file: db/postgres-u.txt
-  postgres-p:
-    file: db/postgres-p.txt
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: arhida-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    networks:
+      - internal_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  embeddings:
+    build:
+      context: .
+      dockerfile: embeddings_service/Dockerfile
+    image: arhida-embeddings:local
+    container_name: arhida-embeddings
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_NAME=${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}
+      - MODEL_DIMENSION=${VECTOR_SIZE:-384}
+      - MAX_BATCH_SIZE=${EMBEDDING_MAX_BATCH_SIZE:-64}
+      - MODEL_PATH=${MODEL_PATH:-/models/bge-small-en-v1.5/model.onnx}
+      - TOKENIZER_PATH=${TOKENIZER_PATH:-/models/bge-small-en-v1.5/tokenizer}
+      - DEVICE=${DEVICE:-cpu}
+      - ORT_EXECUTION_PROVIDER=${ORT_EXECUTION_PROVIDER:-CPU}
+      - ORT_INTRA_THREADS=${ORT_INTRA_THREADS:-0}
+      - ORT_INTER_THREADS=${ORT_INTER_THREADS:-0}
+      - ORT_GRAPH_OPT_LEVEL=${ORT_GRAPH_OPT_LEVEL:-all}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - ACCELERATOR_BACKEND=${ACCELERATOR_BACKEND:-onnx}
+      - ACCELERATOR_FALLBACK_TO_CPU=${ACCELERATOR_FALLBACK_TO_CPU:-false}
+      - SERVICE_PORT=${SERVICE_PORT:-8000}
+      - REQUEST_TIMEOUT_MS=${REQUEST_TIMEOUT_MS:-${EMBEDDING_REQUEST_TIMEOUT_MS:-30000}}
+    volumes:
+      - ./models:/models:ro
+    networks:
+      - internal_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 networks:
-  db_prdnet:
-    external: true
+  internal_net:
+    name: arhida
+    driver: bridge
+
+volumes:
+  qdrant-storage:

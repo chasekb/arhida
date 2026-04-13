@@ -1,0 +1,2023 @@
+# Vector Database Migration Plan
+
+## Objective
+
+Spin up a vector database in `docker-compose.yaml` and transition persistence away from the current external PostgreSQL dependency.
+
+## Executive Summary
+
+The current application is deeply coupled to PostgreSQL across runtime configuration, Docker orchestration, build dependencies, schema management, upsert logic, and backfill queries. This means the migration is not just a compose change; it is a storage architecture change.
+
+Recommended target: **Qdrant**.
+
+Qdrant is the best fit for this project because it is lightweight to run in Docker Compose, offers durable local storage, supports payload filtering, and exposes a simple HTTP API that fits well with the existing C++ stack (`libcurl` + `nlohmann/json`).
+
+---
+
+## Current State Review
+
+### PostgreSQL Coupling Identified
+
+The project currently depends on PostgreSQL in the following places:
+
+- `docker-compose.yaml`
+  - Injects only `POSTGRES_*` variables
+  - Assumes an external Docker network for a Postgres service
+  - Uses Postgres credential secrets
+- `.env.example`
+  - Only defines PostgreSQL connection and schema settings
+- `CMakeLists.txt`
+  - Requires `libpq`
+- `include/db/Database.h` / `src/db/Database.cpp`
+  - Uses `PGconn`, `PGresult`, `PQconnectdb`, `PQexec`, and schema/table/index creation
+- `src/harvester/Harvester.cpp`
+  - Assumes relational schema creation
+  - Uses Postgres-specific upsert semantics (`ON CONFLICT`)
+  - Uses Postgres JSONB-style filtering assumptions
+- `legacy_python/arhida.py`
+  - Confirms the same persistence model in the original implementation
+- `README.md` and `docs/cpp_transition.md`
+  - Describe PostgreSQL as the system of record
+
+### Important Functional Observation
+
+The system today is **metadata harvesting with relational persistence**. It is **not yet a vector-search system** because it does not generate embeddings.
+
+That means migration requires two changes:
+
+1. Replacing the storage backend
+2. Introducing an embedding pipeline so the vector database is useful as a vector database
+
+---
+
+## Recommended Vector Database
+
+## Choice: Qdrant
+
+### Why Qdrant
+
+- Simple Docker Compose deployment
+- Persistent local volume support
+- HTTP API works well with current C++ dependencies
+- Supports payload storage for raw arXiv metadata
+- Supports filtered retrieval for backfill/state checks
+- Supports id-based upserts, which maps well to `header_identifier`
+
+### Why Not pgvector
+
+`pgvector` would reduce implementation complexity, but it keeps the project on PostgreSQL. That does not satisfy the goal of transitioning away from the current external Postgres dependency to a standalone vector database.
+
+### Why Not Milvus or Weaviate
+
+- **Milvus**: more operational complexity than this project currently needs
+- **Weaviate**: good platform, but heavier and more opinionated than necessary for a harvesting pipeline of this size
+
+---
+
+## Proposed Target Architecture
+
+### Services
+
+- `app`: existing C++ harvester
+- `qdrant`: new vector database service
+- optional future `embeddings` service if local embedding generation is preferred
+
+### Persistence Model
+
+Each arXiv record becomes a vector point in Qdrant:
+
+- `id`: deterministic id derived from `header_identifier`
+- `vector`: embedding for searchable text
+- `payload`:
+  - `header_datestamp`
+  - `header_identifier`
+  - `header_setSpecs`
+  - `metadata_creator`
+  - `metadata_date`
+  - `metadata_description`
+  - `metadata_identifier`
+  - `metadata_subject`
+  - `metadata_title`
+  - `metadata_type`
+  - `created_at`
+  - `updated_at`
+
+### Recommended Embedding Input
+
+Use a concatenated text payload such as:
+
+```text
+title + subject + description
+```
+
+This preserves semantic retrieval quality while keeping the embedding model input simple.
+
+---
+
+## Docker Compose Plan
+
+## Step 1: Add Qdrant to `docker-compose.yaml`
+
+Planned service shape:
+
+```yaml
+services:
+  app:
+    image: ghcr.io/chasekb/arhida:latest
+    environment:
+      - VECTOR_DB_PROVIDER=qdrant
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=arxiv_metadata
+      - VECTOR_SIZE=1024
+      - EMBEDDING_PROVIDER=<to-be-decided>
+      - EMBEDDING_MODEL=<to-be-decided>
+      - ARXIV_RATE_LIMIT_DELAY=${ARXIV_RATE_LIMIT_DELAY:-3}
+      - ARXIV_BATCH_SIZE=${ARXIV_BATCH_SIZE:-2000}
+      - ARXIV_MAX_RETRIES=${ARXIV_MAX_RETRIES:-3}
+      - ARXIV_RETRY_AFTER=${ARXIV_RETRY_AFTER:-5}
+    depends_on:
+      - qdrant
+    networks:
+      - app_net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    networks:
+      - app_net
+
+networks:
+  app_net:
+    driver: bridge
+
+volumes:
+  qdrant-storage:
+```
+
+### Step 2: Remove External Postgres Assumptions
+
+Planned changes:
+
+- remove `POSTGRES_*` as primary runtime env vars
+- remove Postgres Docker secrets from the default runtime path
+- remove dependence on the external `db_prdnet` network unless needed during migration
+
+### Step 3: Keep Temporary Dual-Write or Migration Mode Optional
+
+For safer rollout, retain a temporary compatibility mode where the app can still read from PostgreSQL during migration validation.
+
+---
+
+## Application Refactor Plan
+
+## Phase 1: Configuration Refactor
+
+Replace Postgres-only config with storage-agnostic configuration.
+
+### New Configuration Fields
+
+- `VECTOR_DB_PROVIDER`
+- `QDRANT_URL`
+- `QDRANT_COLLECTION`
+- `QDRANT_API_KEY` (optional)
+- `VECTOR_SIZE`
+- `EMBEDDING_PROVIDER`
+- `EMBEDDING_MODEL`
+
+### Transitional Compatibility
+
+Keep existing `POSTGRES_*` settings only if a migration tool still needs to read from the old database.
+
+---
+
+## Phase 2: Storage Abstraction
+
+The existing `Database` class should be replaced with an abstraction layer.
+
+### Proposed Interface
+
+```cpp
+class StorageEngine {
+public:
+    virtual ~StorageEngine() = default;
+    virtual void connect() = 0;
+    virtual void initialize() = 0;
+    virtual void upsertRecord(const Record& record) = 0;
+    virtual std::vector<std::string> getMissingDates(
+        const std::string& start_date,
+        const std::string& end_date,
+        const std::string& set_spec) = 0;
+};
+```
+
+### Planned Implementations
+
+- `QdrantStorage`
+- optional temporary `PostgresStorage` for migration parity
+
+This change isolates storage behavior from harvesting behavior.
+
+---
+
+## Phase 3: Qdrant Storage Implementation
+
+`QdrantStorage` should handle:
+
+- collection existence checks
+- collection creation
+- point upserts
+- payload filtering
+- date/set-spec lookup for backfill logic
+
+### Qdrant Collection Requirements
+
+- collection name: `arxiv_metadata`
+- vector size: depends on embedding model
+- distance metric: likely `Cosine`
+
+### Deterministic Point IDs
+
+Because `header_identifier` is a string, convert it into a deterministic point id using one of:
+
+- UUIDv5 from `header_identifier`
+- stable hash mapping
+
+UUIDv5 is preferred for stable reproducibility.
+
+---
+
+## Phase 4: Embedding Pipeline
+
+This is the most important missing capability.
+
+Without embeddings, a vector DB is only acting as a metadata store.
+
+This plan selects a **separate local `embeddings` service** as the target architecture. A detailed pros/cons comparison of separate-service versus in-app embeddings is preserved in an endnote at the end of this document.
+
+### Decisions Required
+
+Choose one:
+
+1. **External embedding API**
+   - simpler to implement initially
+   - introduces API cost and secret management
+2. **Local embedding model service**
+   - better self-hosting story
+   - more operational complexity in Compose
+
+### Updated Implementation Direction
+
+This migration plan now assumes a **local embedding model service** will be implemented and run alongside the application and Qdrant in Docker Compose.
+
+That means embeddings are no longer treated as an optional future enhancement; they become a first-class part of the target runtime architecture.
+
+### New Module Needed
+
+- `EmbeddingClient`
+
+Responsibilities:
+
+- generate embeddings from metadata text
+- batch requests when possible
+- retry failures
+- return vectors sized to the configured collection dimension
+
+---
+
+## Local Embedding Model Service Plan
+
+## Target Approach
+
+Run embeddings as a dedicated local service in Compose and have the C++ harvester call it over HTTP.
+
+### Updated Service Topology
+
+- `app`: arXiv harvester and orchestration
+- `embeddings`: local model inference service
+- `qdrant`: vector database
+
+### High-Level Flow
+
+1. `app` harvests metadata from arXiv
+2. `app` constructs embedding input text
+3. `app` sends text to `embeddings`
+4. `embeddings` returns dense vectors
+5. `app` upserts vectors + payload into Qdrant
+
+---
+
+## Compose-Level Implementation Requirements
+
+## Required `docker-compose.yaml` Changes
+
+Add a new `embeddings` service, for example:
+
+```yaml
+services:
+  app:
+    depends_on:
+      - embeddings
+      - qdrant
+    environment:
+      - VECTOR_DB_PROVIDER=qdrant
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=arxiv_metadata
+      - EMBEDDING_SERVICE_URL=http://embeddings:8000
+      - EMBEDDING_MODEL_NAME=bge-small-en-v1.5
+      - VECTOR_SIZE=384
+
+  embeddings:
+    image: ghcr.io/chasekb/arhida-embeddings:local
+    container_name: arhida-embeddings
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_NAME=bge-small-en-v1.5
+      - MODEL_DIMENSION=384
+      - MAX_BATCH_SIZE=64
+      - DEVICE=cuda
+      - MODEL_PATH=/models/bge-small-en-v1.5/model.onnx
+      - TOKENIZER_PATH=/models/bge-small-en-v1.5/tokenizer
+      - CUDA_VISIBLE_DEVICES=0
+      - ORT_EXECUTION_PROVIDER=CUDA
+    volumes:
+      - model-files:/models:ro
+    networks:
+      - app_net
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    networks:
+      - app_net
+
+volumes:
+  qdrant-storage:
+  model-files:
+```
+
+### Compose Requirements Summary
+
+- add `embeddings` container
+- mount model artifacts into the container via a dedicated volume
+- put `app`, `embeddings`, and `qdrant` on the same internal network
+- ensure `app` waits for `embeddings` and `qdrant`
+- expose model configuration through environment variables
+- allow GPU-capable runtime configuration for the embeddings container
+
+### Model Volume Mount Requirement
+
+The embedding service should load model assets from a mounted volume rather than downloading them dynamically at startup.
+
+Recommended layout:
+
+```text
+/models/
+  bge-small-en-v1.5/
+    model.onnx
+    tokenizer/
+      tokenizer.json
+      tokenizer_config.json
+      special_tokens_map.json
+      vocab files...
+```
+
+Benefits:
+
+- faster startup
+- reproducible deployments
+- easier model upgrades/rollbacks
+- avoids repeated downloads in restricted environments
+
+### GPU Enablement Requirement
+
+The Compose deployment should support GPU-backed inference for the `embeddings` service.
+
+At a minimum, the plan should account for:
+
+- CUDA-capable ONNX Runtime build in the image
+- Apple Silicon / MLX-capable deployment path for macOS-hosted local inference
+- visible GPU device configuration
+- execution provider selection via environment variable
+- fallback to CPU mode when GPU is unavailable
+
+### MLX Support Requirement
+
+Because development may occur on Apple Silicon hardware, the plan should also support an **MLX-based acceleration path** in addition to CUDA.
+
+This means the embeddings architecture should recognize two GPU-oriented runtime families:
+
+- **CUDA** for NVIDIA-backed Linux environments
+- **MLX** for Apple Silicon local environments
+
+The migration plan should therefore treat GPU support as a broader accelerator strategy rather than CUDA-only support.
+
+---
+
+## Embedding Service Functional Requirements
+
+The local embedding service should provide a narrow, stable API.
+
+### Minimum API Requirements
+
+#### Health Endpoint
+
+```http
+GET /health
+```
+
+Response should confirm:
+
+- service is alive
+- model is loaded
+- configured vector dimension
+- current device (`cpu` or `gpu`)
+
+#### Single or Batch Embedding Endpoint
+
+```http
+POST /embed
+Content-Type: application/json
+
+{
+  "inputs": [
+    "first text",
+    "second text"
+  ]
+}
+```
+
+Expected response:
+
+```json
+{
+  "model": "bge-small-en-v1.5",
+  "dimension": 384,
+  "vectors": [
+    [0.1, 0.2, 0.3],
+    [0.4, 0.5, 0.6]
+  ]
+}
+```
+
+### API Contract Requirements
+
+- deterministic response order matching input order
+- explicit vector dimension in the response
+- predictable error codes for invalid input, overload, and model-load failure
+- request size limits to prevent memory blowups
+- timeout behavior suitable for batch ingestion
+
+---
+
+## Embedding Model Requirements
+
+### Model Selection Requirements
+
+Choose a local model that is:
+
+- lightweight enough for local/containerized inference
+- strong enough for semantic search over titles + abstracts
+- available with a clear runtime path
+- stable in vector size
+
+### Recommended Starting Model Class
+
+Use a small sentence-transformer or BGE-family model for the first implementation.
+
+Good starting candidates:
+
+- `BAAI/bge-small-en-v1.5`
+- `sentence-transformers/all-MiniLM-L6-v2`
+
+### Preferred Starting Choice
+
+`bge-small-en-v1.5`
+
+Why:
+
+- good quality/size tradeoff
+- practical for local inference
+- widely used for semantic retrieval
+- manageable vector dimension for Qdrant
+
+### Model Constraints to Lock Down
+
+The plan must pin:
+
+- exact model name
+- exact vector dimension
+- normalization behavior
+- embedding input formatting rules
+
+These must remain stable or the Qdrant collection and migration logic will drift.
+
+---
+
+## Embedding Service Technical Implementation Requirements
+
+### Recommended C++ Stack
+
+To keep the embedding service aligned with the rest of this repository, the service can be implemented in **C++** rather than Python.
+
+Recommended stack:
+
+- C++20
+- HTTP server framework: **Drogon**, **Crow**, or **Boost.Beast**
+- JSON serialization: **nlohmann/json**
+- logging: **spdlog**
+- model inference runtime: **ONNX Runtime C++ API**
+- tokenizer/runtime assets packaged with the service image
+
+### Preferred C++ Implementation Choice
+
+The strongest practical option is:
+
+- **Drogon** for the HTTP service layer
+- **ONNX Runtime** for model inference
+- **nlohmann/json** for request/response handling
+- **spdlog** for observability
+
+Why:
+
+- good production-quality HTTP server support
+- straightforward JSON handling
+- strong C++ interoperability
+- avoids introducing a second language/runtime into the deployment
+- ONNX Runtime provides a realistic path for efficient local inference in C++
+
+### Model Packaging Strategy for C++
+
+The local model service should not depend on Python-only model loading at runtime.
+
+Instead, the plan should assume:
+
+1. choose a transformer embedding model that can be exported to **ONNX**
+2. mount the ONNX model files and tokenizer assets into the container via a dedicated read-only model volume
+3. load tokenizer assets and model artifacts directly from the filesystem at startup
+
+This keeps inference fully local and C++-native.
+
+### Preferred Artifact Strategy
+
+Prefer **volume-mounted model artifacts** over baking large model files directly into the image.
+
+Why:
+
+- smaller and more reusable container images
+- easier to swap models without rebuilding the service image
+- cleaner separation between runtime binary and model assets
+- better fit for GPU and multi-environment deployments
+
+### Required Capabilities
+
+#### 1. Model Bootstrap
+
+- load model from mounted filesystem path at container startup
+- fail fast if model cannot load
+- validate that required model/tokenizer files exist on the mounted volume
+- expose startup status in logs and health endpoint
+
+#### 1a. Tokenizer Support
+
+Because transformer embeddings require tokenization, the C++ service must also include a tokenizer strategy.
+
+Recommended options:
+
+- use an ONNX-compatible tokenizer pipeline if available
+- use Hugging Face tokenizer assets with a compatible C++ tokenizer library
+- prepackage tokenizer vocabulary/config files in the service image
+
+Tokenizer behavior must be locked to the selected model version so embedding output remains stable.
+
+#### 2. Batch Inference
+
+- accept multiple texts in one request
+- process batches efficiently
+- configurable max batch size
+- reject oversized requests cleanly
+
+#### 3. Resource Configuration
+
+- allow CPU-only mode by default
+- support GPU execution when configured
+- support accelerator-specific execution modes for both CUDA and MLX environments
+- configurable worker counts and concurrency
+- configurable memory limits in Compose/runtime
+
+#### 3a. ONNX Runtime Execution Configuration
+
+The service should expose runtime controls for:
+
+- intra-op thread count
+- inter-op thread count
+- execution provider selection
+- graph optimization level
+- model session warmup at startup
+
+These settings will matter for backfill throughput and developer-machine stability.
+
+#### 3b. GPU Execution Requirements
+
+The C++ embeddings service should support GPU inference through ONNX Runtime CUDA execution provider when available.
+
+Required behavior:
+
+- select CPU or CUDA provider based on configuration
+- fail clearly if CUDA is requested but not available
+- report active execution provider via `/health`
+- keep CPU fallback mode available for non-GPU hosts
+
+#### 3c. MLX Execution Requirements
+
+For Apple Silicon environments, the plan should also support an **MLX-backed local inference mode**.
+
+Required behavior:
+
+- support a distinct runtime mode such as `DEVICE=mlx`
+- expose the active accelerator mode via `/health`
+- keep model/tokenizer assets mounted from the same volume-based artifact strategy
+- allow local development on macOS without requiring CUDA or NVIDIA tooling
+
+### Accelerator Abstraction Requirement
+
+To support CPU, CUDA, and MLX cleanly, the embeddings service should abstract execution backends behind a common engine interface.
+
+Suggested conceptual interface:
+
+```cpp
+class EmbeddingBackend {
+public:
+    virtual ~EmbeddingBackend() = default;
+    virtual void initialize() = 0;
+    virtual std::vector<std::vector<float>> embed(const BatchInput& input) = 0;
+    virtual std::string backendName() const = 0;
+};
+```
+
+Potential implementations:
+
+- `OnnxCpuBackend`
+- `OnnxCudaBackend`
+- `MlxBackend`
+
+This keeps the HTTP service and request contract stable while allowing environment-specific acceleration choices.
+
+#### 4. Stable Preprocessing
+
+The service must define consistent preprocessing for all text before embedding.
+
+At minimum:
+
+- trim leading/trailing whitespace
+- collapse repeated internal whitespace
+- handle missing title/subject/description fields consistently
+- enforce UTF-8-safe input handling
+
+#### 5. Error Handling
+
+- return structured JSON errors
+- distinguish validation errors from inference failures
+- expose transient vs permanent failure semantics where possible
+
+#### 6. Observability
+
+- log model load time
+- log batch size and latency
+- expose request failure counts
+- optionally expose metrics endpoint later
+
+---
+
+## C++ Embedding Service Implementation Plan
+
+## Service Structure
+
+Suggested structure for a dedicated C++ embeddings service:
+
+```text
+embeddings_service/
+├── CMakeLists.txt
+├── include/
+│   ├── server/
+│   │   └── HttpServer.h
+│   ├── embedding/
+│   │   ├── EmbeddingEngine.h
+│   │   ├── Tokenizer.h
+│   │   └── TextPreprocessor.h
+│   ├── config/
+│   │   └── EmbeddingConfig.h
+│   └── utils/
+│       └── HealthStatus.h
+├── src/
+│   ├── main.cpp
+│   ├── server/
+│   ├── embedding/
+│   ├── config/
+│   └── utils/
+└── Dockerfile
+```
+
+## Core Components
+
+### `EmbeddingConfig`
+
+Responsibilities:
+
+- load model path
+- load tokenizer path
+- load vector dimension
+- configure batch size
+- configure port
+- configure ONNX runtime threading/execution settings
+
+### `TextPreprocessor`
+
+Responsibilities:
+
+- normalize whitespace
+- enforce UTF-8-safe handling
+- apply stable formatting rules before tokenization
+
+### `Tokenizer`
+
+Responsibilities:
+
+- transform normalized input strings into token ids, masks, and attention inputs expected by the model
+- enforce truncation and padding rules
+- expose deterministic batching behavior
+
+### `EmbeddingEngine`
+
+Responsibilities:
+
+- initialize ONNX Runtime environment/session
+- load model and tokenizer resources
+- run inference on a batch of prepared inputs
+- optionally normalize vectors before returning them
+- validate output dimension
+
+### `HttpServer`
+
+Responsibilities:
+
+- expose `/health`
+- expose `/embed`
+- validate request payloads
+- marshal JSON in/out
+- handle error responses and timeouts
+
+---
+
+## Inference Runtime Requirements for C++
+
+### ONNX Runtime Requirements
+
+The service should use ONNX Runtime as the primary inference engine.
+
+Required capabilities:
+
+- load model session once at startup
+- reuse session across requests
+- support batch inference
+- support CPU execution first
+- optionally support CUDA execution provider later
+
+### MLX Runtime Requirements
+
+For Apple Silicon support, the service should also define a separate MLX-capable inference path.
+
+Practical implication:
+
+- the C++ service may need a backend abstraction where ONNX Runtime remains the Linux/CPU/CUDA default
+- MLX support may be implemented through a dedicated adapter or companion runtime path for macOS development environments
+
+Because MLX is not an ONNX Runtime execution provider, it should be treated as a separate backend rather than a variant of CUDA support.
+
+### Output Normalization Requirement
+
+If cosine similarity is used in Qdrant, the service should either:
+
+- return normalized vectors directly, or
+- return raw vectors and document that normalization occurs in the caller
+
+The plan should prefer **service-side normalization** so all downstream consumers receive consistent vectors.
+
+---
+
+## C++ HTTP Layer Options
+
+### Option 1: Drogon
+
+Best overall choice for a production-style C++ service.
+
+Pros:
+
+- mature HTTP framework
+- routing, middleware, and JSON support
+- good performance and async model
+
+Cons:
+
+- heavier framework footprint than minimal alternatives
+
+### Option 2: Crow
+
+Lighter and simpler than Drogon.
+
+Pros:
+
+- fast to stand up
+- minimal API surface
+
+Cons:
+
+- less full-featured for long-term service growth
+
+### Option 3: Boost.Beast
+
+Lowest-level option.
+
+Pros:
+
+- maximum control
+- strong C++ ecosystem alignment
+
+Cons:
+
+- most implementation effort
+- more boilerplate for routing and JSON APIs
+
+### Recommendation
+
+Use **Drogon** unless there is a strong reason to minimize dependencies. It provides the best balance of maintainability and production readiness.
+
+---
+
+## C++ Build and Packaging Requirements
+
+### CMake Requirements
+
+The embedding service will need a dedicated `CMakeLists.txt` that includes:
+
+- HTTP framework dependency
+- ONNX Runtime headers/libraries
+- `nlohmann/json`
+- `spdlog`
+- any tokenizer library used
+
+### Docker Requirements
+
+The service image should:
+
+- install ONNX Runtime dependencies
+- support loading model and tokenizer assets from a mounted read-only volume
+- include a GPU-capable variant or base image when CUDA support is enabled
+- expose the HTTP port
+- warm up the model at startup if possible
+
+### Suggested Runtime Environment Variables
+
+- `MODEL_PATH`
+- `TOKENIZER_PATH`
+- `MODEL_NAME`
+- `MODEL_DIMENSION`
+- `MAX_BATCH_SIZE`
+- `SERVICE_PORT`
+- `ORT_INTRA_THREADS`
+- `ORT_INTER_THREADS`
+- `DEVICE=cpu|cuda|mlx`
+- `ORT_EXECUTION_PROVIDER=CPU|CUDA`
+- `CUDA_VISIBLE_DEVICES`
+- `ACCELERATOR_BACKEND=onnx|mlx`
+
+---
+
+## C++ Service Operational Requirements
+
+### Startup Sequence
+
+At startup the service should:
+
+1. load config
+2. initialize logger
+3. verify mounted model/tokenizer assets are present
+4. load tokenizer assets
+5. initialize the selected inference backend
+6. configure CPU, CUDA, or MLX execution path
+7. run a warmup inference
+8. expose healthy status only after successful warmup
+
+### Health Check Contract
+
+`GET /health` should return at least:
+
+- model loaded: true/false
+- tokenizer loaded: true/false
+- vector dimension
+- runtime device
+- execution provider
+- accelerator backend
+- service version
+
+### Failure Handling Requirements
+
+- if tokenizer load fails, service should not start
+- if model session load fails, service should not start
+- if CUDA is requested but unavailable, service should either fail fast or explicitly fall back according to configuration
+- if MLX is requested but unavailable, service should either fail fast or explicitly fall back according to configuration
+- if batch inference fails, request should return structured error JSON
+- if output dimension mismatches configured dimension, request should fail hard
+
+### Apple Silicon Development Recommendation
+
+For local macOS development on Apple Silicon:
+
+- prefer `DEVICE=mlx`
+- continue to mount model artifacts from `/models`
+- keep the same `/embed` and `/health` API contract as Linux deployments
+- document any model-format conversion requirements needed for the MLX backend
+
+---
+
+## Revised Recommendation for the Embedding Service Stack
+
+If you want the embedding service to stay consistent with the rest of this repository’s technology direction, the plan should use:
+
+- **C++20**
+- **Drogon**
+- **ONNX Runtime C++ API**
+- **nlohmann/json**
+- **spdlog**
+
+with backend flexibility for:
+
+- **ONNX Runtime CPU/CUDA** in Linux/NVIDIA environments
+- **MLX-backed execution** in Apple Silicon local environments
+
+That gives you a fully local, C++-native embedding service that integrates cleanly with the existing C++ application while avoiding the operational split of a Python-based inference stack.
+
+---
+
+## Application-Side Requirements for Local Embeddings
+
+The C++ app will need a dedicated embedding client layer.
+
+### New Config Fields Required
+
+- `EMBEDDING_SERVICE_URL`
+- `EMBEDDING_MODEL_NAME`
+- `VECTOR_SIZE`
+- `EMBEDDING_REQUEST_TIMEOUT_MS`
+- `EMBEDDING_MAX_BATCH_SIZE`
+- `EMBEDDING_RETRY_COUNT`
+
+### New C++ Components Required
+
+#### `EmbeddingClient`
+
+Responsibilities:
+
+- call `/health` on startup or during initialization
+- send batched text payloads to `/embed`
+- validate returned vector dimension
+- retry transient failures
+- surface hard failures clearly to harvesting logic
+
+#### `EmbeddingTextBuilder`
+
+Responsibilities:
+
+- build stable input text from record fields
+- normalize whitespace
+- guarantee consistent field ordering
+
+Suggested format:
+
+```text
+Title: <title>
+Subjects: <subject1>; <subject2>
+Description: <abstract>
+```
+
+This format should be versioned conceptually so future changes do not silently alter retrieval behavior.
+
+Current decision for additional embedding metadata (Phase 5):
+
+- **Defer additional metadata fields for now** and keep the canonical embedding input
+  limited to `title + subject + description`.
+- Revisit potential inclusion of `creator`, `date`, `type`, or identifier-derived context
+  under Phase 13 once expanded metadata harvesting is finalized.
+
+---
+
+## Qdrant Requirements for Local Embeddings
+
+Qdrant collection settings must match the local model.
+
+### Required Alignment
+
+- collection vector dimension must equal model output dimension
+- distance metric should be chosen consistently with normalization strategy
+- if vectors are normalized, cosine similarity is the preferred default
+
+### Operational Requirement
+
+The app should validate at startup that:
+
+- the embedding service reports dimension `N`
+- Qdrant collection expects dimension `N`
+
+If they do not match, startup should fail fast rather than corrupting the collection with incompatible writes.
+
+---
+
+## Backfill and Migration Requirements with Local Embeddings
+
+Local inference introduces throughput constraints that affect migration and backfill.
+
+### Requirements
+
+- historical migration utility must support batching for embedding requests
+- migration utility must support checkpoint/resume
+- backfill should rate-limit both arXiv requests and embedding requests independently
+- large historical loads may need a separate migration mode from normal daily harvesting
+
+Current decision for runtime backfill state tracking:
+
+- **Normal harvester backfill state is derived from Qdrant payloads**
+  (`header_datestamp` + `header_setSpecs`) via `getMissingDates()` filters.
+- **A separate checkpoint mechanism is deferred to the dedicated historical
+  migration utility** (Phase 14) where long-running resume semantics matter most.
+
+### Recommended Migration Behavior
+
+- read historical records from PostgreSQL in chunks
+- build embedding text in chunks
+- call embedding service in batches
+- upsert into Qdrant in batches
+- persist checkpoint state after each successful chunk
+
+---
+
+## Local Embedding Service Non-Functional Requirements
+
+### Performance Requirements
+
+- acceptable latency for small batches
+- predictable throughput under backfill loads
+- graceful degradation if request volume spikes
+
+### Reliability Requirements
+
+- startup health check must verify model is loaded
+- service should restart cleanly without data loss
+- temporary failures must be recoverable by client retries
+
+### Security Requirements
+
+- internal-only network exposure by default
+- no public exposure unless explicitly needed
+- request body size limits
+- dependency/image pinning for reproducible builds
+
+### Portability Requirements
+
+- CPU-first deployment must work on ordinary developer machines
+- optional GPU support should be additive, not required
+
+---
+
+## Documentation Requirements for Local Embeddings
+
+The migration docs should explicitly document:
+
+- chosen model name and dimension
+- service API contract
+- compose configuration
+- model cache volume behavior
+- CPU vs GPU runtime options
+- failure and retry behavior
+- how to rebuild the collection if model/dimension changes
+
+---
+
+## Revised Recommendation
+
+The target implementation should now be:
+
+1. add `qdrant` service to Compose
+2. add **local `embeddings` service** to Compose
+3. refactor app config to use `EMBEDDING_SERVICE_URL` and Qdrant settings
+4. build `EmbeddingClient` in C++
+5. implement stable embedding text formatting
+6. create Qdrant collection using the local model's fixed dimension
+7. migrate historical PostgreSQL records through the local embedding service
+
+This gives the project a fully local vector pipeline with no dependency on an external embedding provider.
+
+---
+
+## Detailed Implementation Checklist
+
+This section breaks the migration into checkable implementation phases.
+
+## Phase 0: Design and Readiness
+
+- [x] Confirm Qdrant as the target vector database
+- [x] Confirm the local embeddings-service architecture is the intended target
+- [x] Confirm the initial embedding model name and vector dimension
+- [x] Confirm the initial embedding text format for each arXiv record
+- [x] Confirm whether additional arXiv metadata formats (`arXiv`, `arXivRaw`) will be harvested in phase 1 or deferred
+- [x] Confirm whether historical PostgreSQL migration is in scope for the first release
+- [x] Confirm target deployment environments:
+  - [x] Linux CPU
+  - [x] Linux NVIDIA GPU / CUDA
+  - [x] macOS Apple Silicon / MLX
+
+Current decision summary for Phase 0:
+
+- Vector DB target is **Qdrant** for primary runtime persistence.
+- Embeddings architecture target is a **dedicated local embeddings service**.
+- Initial model + dimension are pinned to **`bge-small-en-v1.5` @ `384`**.
+- Initial embedding text format is pinned to canonical:
+  `Title / Subjects / Description` (deterministic ordering + whitespace normalization).
+- Expanded metadata harvesting (`arXiv`, `arXivRaw`) is **deferred** (Phase 13).
+- Historical PostgreSQL migration is **in scope** via `arhida-migrate` +
+  `scripts/postgres_to_qdrant_migration.sh`.
+- Target environments are confirmed: Linux CPU, Linux CUDA, and Apple Silicon MLX.
+
+## Phase 1: Docker Compose and Runtime Topology
+
+- [x] Update `docker-compose.yaml` to add `qdrant`
+- [x] Add persistent `qdrant-storage` volume
+- [x] Add `embeddings` service to `docker-compose.yaml`
+- [x] Add read-only model artifact volume mount for embeddings service
+- [x] Add environment variables for Qdrant connectivity
+- [x] Add environment variables for embeddings-service connectivity
+- [x] Add environment variables for model path, tokenizer path, dimension, and batch size
+- [x] Add environment variables for accelerator selection (`cpu`, `cuda`, `mlx`)
+- [x] Add startup ordering / dependency configuration for `app -> embeddings -> qdrant`
+- [x] Ensure services share the correct internal network
+- [x] Decide whether to remove or temporarily keep the external PostgreSQL network dependency
+- [x] Document example compose overrides for:
+  - [x] CPU-only deployment
+  - [x] CUDA-enabled deployment
+  - [x] Apple Silicon / MLX development
+
+## Phase 2: Configuration Refactor in the C++ App
+
+- [x] Extend `Config` to support vector database settings
+- [x] Extend `Config` to support embeddings-service settings
+- [x] Add config for `EMBEDDING_SERVICE_URL`
+- [x] Add config for `EMBEDDING_MODEL_NAME`
+- [x] Add config for `VECTOR_SIZE`
+- [x] Add config for embedding timeout / retry controls
+- [x] Add config for accelerator/backend awareness if needed by the app
+- [x] Preserve temporary PostgreSQL settings for migration tooling if still needed
+- [x] Update `.env.example` with new vector/embedding configuration
+- [x] Remove or de-emphasize Postgres-only runtime guidance in docs/examples
+
+## Phase 3: Storage Abstraction in the C++ App
+
+- [x] Define a storage abstraction interface (for example `StorageEngine`)
+- [x] Refactor harvester code to depend on the abstraction rather than `Database`
+- [x] Add initial runtime backend selection between PostgreSQL and Qdrant
+- [x] Decide whether the existing Postgres implementation becomes `PostgresStorage` or remains migration-only
+- [x] Separate schema/table responsibilities from general storage orchestration
+- [x] Define abstraction methods for:
+  - [x] connect / initialize
+  - [x] upsert record
+  - [x] collection/index setup
+  - [x] missing-date lookup / checkpoint queries
+  - [x] any required stats or validation helpers
+
+Current decision for PostgreSQL implementation role (Phase 3):
+
+- Keep the current `Database` implementation as the temporary PostgreSQL-backed
+  `StorageEngine` implementation during migration.
+- Treat it as **migration-compatibility storage** while Qdrant remains the
+  default runtime backend.
+- Re-evaluate a full rename/split to `PostgresStorage` during cleanup/cutover
+  once Postgres runtime dependence is removed.
+
+## Phase 4: Qdrant Storage Implementation
+
+- [x] Create a `QdrantStorage` implementation
+- [x] Implement Qdrant connection/bootstrap logic
+- [x] Implement collection existence checks
+- [x] Implement collection creation with correct dimension and distance metric
+- [x] Implement id generation from `header_identifier`
+- [x] Implement point upsert logic
+- [x] Implement payload serialization for all persisted metadata fields
+- [x] Implement filtering/query support needed by backfill logic
+- [x] Add startup validation that collection dimension matches embedding dimension
+- [x] Add logging and error handling for Qdrant request failures
+- [x] Add tests or smoke checks for collection creation and upsert behavior
+
+Current smoke-check implementation for Phase 4:
+
+- `scripts/qdrant_smoke.sh` validates end-to-end Qdrant collection lifecycle behavior:
+  - health check (`/healthz`)
+  - collection creation with configured vector size
+  - point upsert (vector + payload)
+  - scroll query verification of persisted payload
+  - cleanup via collection delete
+
+## Phase 5: Embedding Text and Record Preparation
+
+- [x] Implement `EmbeddingTextBuilder`
+- [x] Define the canonical text layout for embeddings
+- [x] Normalize whitespace and field ordering deterministically
+- [x] Handle missing title/subject/abstract values consistently
+- [x] Decide whether additional metadata should be included in the embedding text now or later
+- [x] Version the embedding text format conceptually in docs/code comments
+- [x] Add tests for text-building behavior
+
+Current test coverage for Phase 5 text-building behavior:
+
+- `tests/EmbeddingTextBuilderTest.cpp` validates:
+  - canonical output layout (`Title`, `Subjects`, `Description`)
+  - deterministic whitespace normalization
+  - `<missing>` fallback behavior for empty title/subject/description inputs
+
+## Phase 6: C++ Embeddings Service Foundation
+
+- [x] Create a dedicated embeddings-service project structure
+- [x] Add `CMakeLists.txt` for the embeddings service
+- [x] Add HTTP server dependency (recommended: Drogon)
+- [x] Add ONNX Runtime dependency
+- [x] Add `nlohmann/json` and `spdlog`
+- [x] Define service config loading
+- [x] Define `/health` endpoint contract
+- [x] Define `/embed` endpoint contract
+- [x] Define structured error response format
+- [x] Add startup logging and service versioning
+
+Current implementation details for Phase 6 foundation:
+
+- Added `embeddings_service/` scaffold with:
+  - `CMakeLists.txt`
+  - `include/config/EmbeddingServiceConfig.h`
+  - `src/config/EmbeddingServiceConfig.cpp`
+  - `include/server/HttpServer.h`
+  - `src/server/HttpServer.cpp`
+  - `src/main.cpp`
+- Drogon-based HTTP service now exposes:
+  - `GET /health` with service/version/model/dimension/device/backend readiness metadata
+  - `POST /embed` request validation (`inputs` array, string-only items, max batch size)
+  - Structured JSON errors for invalid request, oversized batch, invalid input type, and invalid JSON
+- `CMakeLists.txt` links Drogon + `nlohmann/json` + `spdlog` and includes ONNX Runtime as an interface dependency for follow-on inference phases.
+- `/embed` currently returns deterministic placeholder vectors (zero-filled with configured dimension) as a Phase 6 contract scaffold; real model inference wiring remains planned for Phase 8.
+
+## Phase 7: Model Artifact and Tokenizer Management
+
+- [x] Choose the initial exported model artifact format
+- [x] Prepare ONNX model files for the selected embedding model
+- [x] Prepare tokenizer assets for the selected embedding model
+- [x] Define mounted model directory layout under `/models`
+- [x] Implement startup validation for required model/tokenizer files
+- [x] Document artifact preparation and placement steps
+- [x] Decide how model upgrades/rollbacks will be handled operationally
+
+Current implementation details for Phase 7 progress:
+
+- Initial artifact format is pinned to **ONNX model artifact + tokenizer assets**
+  (`tokenizer.json`-based directory) mounted under `/models`.
+- Repository now includes baseline local model artifacts for runtime/smoke validation:
+  - `models/bge-small-en-v1.5/model.onnx`
+  - `models/bge-small-en-v1.5/tokenizer/tokenizer.json`
+
+- `EmbeddingServiceConfig` now includes explicit artifact paths:
+  - `MODEL_PATH` (default: `/models/bge-small-en-v1.5/model.onnx`)
+  - `TOKENIZER_PATH` (default: `/models/bge-small-en-v1.5/tokenizer`)
+- Startup config loading validates filesystem requirements:
+  - model file existence check for `MODEL_PATH`
+  - tokenizer directory + `tokenizer.json` existence checks for `TOKENIZER_PATH`
+- Validation behavior is controlled by `STRICT_MODEL_VALIDATION` (default `true`) and fails fast with clear startup errors when required artifacts are missing.
+- `README.md` now documents:
+  - explicit artifact preparation/placement steps for ONNX + tokenizer assets
+  - startup validation behavior and health verification
+  - operational model upgrade and rollback workflow with collection rebuild guidance
+
+## Phase 8: C++ Inference Engine Implementation
+
+- [x] Implement `EmbeddingBackend` interface
+- [x] Implement `OnnxCpuBackend`
+- [x] Implement `OnnxCudaBackend`
+- [x] Define plan for `MlxBackend`
+- [x] Implement ONNX Runtime session initialization
+- [x] Implement batch inference
+- [x] Implement output-dimension validation
+- [x] Implement vector normalization strategy
+- [x] Implement runtime warmup inference
+- [x] Implement tokenizer integration
+- [x] Add tests or verification for returned embedding dimension and stability
+
+Current implementation details for Phase 8 progress:
+
+- Added backend abstraction contract:
+  - `embeddings_service/include/embedding/EmbeddingBackend.h`
+  - includes shared `BatchInput` alias and methods: `initialize()`, `embed()`, `backendName()`
+- Added initial backend implementations (scaffold level):
+  - `OnnxCpuBackend`
+  - `OnnxCudaBackend`
+  - `MlxBackend`
+  - each validates positive output dimension at initialization and returns deterministic normalized vectors sized to configured dimension
+- Added backend selection factory:
+  - `embeddings_service/include/embedding/BackendFactory.h`
+  - `embeddings_service/src/embedding/BackendFactory.cpp`
+  - selection rules currently map `DEVICE`/`ACCELERATOR_BACKEND` to CPU/CUDA/MLX backends
+- Integrated backend lifecycle into HTTP layer:
+  - backend is created + initialized at service startup
+  - `/health` now reports selected backend name
+  - `/embed` routes requests through selected backend implementation
+- Added startup warmup validation path:
+  - server performs a one-item warmup call against the selected backend before serving requests
+  - startup fails fast if warmup output shape does not match configured dimension
+- Updated embeddings service `CMakeLists.txt` to compile and link new backend source files.
+- `/embed` now enforces backend output shape checks at runtime:
+  - vector count must match request input count
+  - each returned vector must match configured model dimension
+- Backend scaffold now applies service-side vector normalization for all current backends:
+  - deterministic pseudo-embeddings are normalized to unit length before response
+  - behavior keeps cosine-distance assumptions aligned for downstream Qdrant usage
+- ONNX CPU/CUDA backends now initialize runtime/model/tokenizer dependencies
+  during backend bootstrap:
+  - parse tokenizer vocabulary from `${TOKENIZER_PATH}/tokenizer.json`
+  - fail fast on missing/empty tokenizer vocab
+  - apply deterministic whitespace normalization + tokenization before embedding
+  - perform ONNX session initialization probe against configured model path
+    (using ONNX Runtime C++ API when headers are available at build time)
+- `scripts/embeddings_smoke.sh` now verifies deterministic backend behavior by asserting
+  identical inputs return identical vectors in the same response.
+  - smoke checks now also verify returned vector norms are approximately 1.0
+  - smoke checks now verify whitespace-normalized inputs map to identical vectors
+    while token-different inputs produce different vectors
+
+## Phase 9: Accelerator Support
+
+### CUDA
+- [x] Add CUDA-capable ONNX Runtime deployment support
+- [x] Support runtime selection of CUDA execution provider
+- [x] Add health reporting for active CUDA execution provider
+- [x] Add failure handling if CUDA is requested but unavailable
+- [x] Validate throughput on NVIDIA-backed environment
+
+### MLX
+- [x] Finalize technical approach for MLX backend implementation
+- [x] Define whether MLX is native C++, bridged, or adapter-backed
+- [x] Implement or stub `MlxBackend`
+- [x] Support runtime selection of `DEVICE=mlx`
+- [x] Add health reporting for active MLX backend
+- [x] Add failure handling if MLX is requested but unavailable
+- [x] Validate local Apple Silicon development path
+
+### Fallback Logic
+- [x] Decide whether accelerator failure should hard fail or fall back automatically
+- [x] Implement explicit fallback policy
+- [x] Document fallback behavior clearly
+
+Current implementation details for Phase 9 progress:
+
+- `EmbeddingServiceConfig` now supports accelerator and ORT runtime controls:
+  - `ORT_EXECUTION_PROVIDER`, `ORT_INTRA_THREADS`, `ORT_INTER_THREADS`,
+    `ORT_GRAPH_OPT_LEVEL`
+  - `ACCELERATOR_FALLBACK_TO_CPU`
+- `BackendFactory` now enforces explicit runtime selection rules:
+  - `DEVICE=cuda` requires `ACCELERATOR_BACKEND=onnx` and
+    `ORT_EXECUTION_PROVIDER=CUDA`
+  - MLX selection requires `DEVICE=mlx` and `ACCELERATOR_BACKEND=mlx`
+  - unsupported accelerator requests fail fast by default, with optional CPU
+    fallback when `ACCELERATOR_FALLBACK_TO_CPU=true`
+- `/health` now reports accelerator/runtime metadata:
+  - active `execution_provider`
+  - requested ORT provider and thread/graph optimization settings
+  - `accelerator_fallback_enabled`
+- Compose and env examples now include new runtime/fallback settings:
+  - `docker-compose.yaml`
+  - `.env.example`
+  - `README.md`
+- Embeddings-service build wiring now supports CUDA-capable ONNX Runtime package
+  resolution explicitly:
+  - `embeddings_service/CMakeLists.txt` now attempts `find_package(ONNXRuntime)`
+    and links `ONNXRuntime::ONNXRuntime` when present
+  - fallback to `ONNXRUNTIME_ROOT` include/lib paths remains available for
+    environments that provide ONNX Runtime outside package config discovery
+- Throughput validation harnesses now cover accelerator-specific validation
+  paths:
+  - `scripts/embeddings_cuda_throughput_benchmark.sh` for NVIDIA/CUDA-backed
+    throughput checks
+  - `scripts/embeddings_mlx_throughput_benchmark.sh` for Apple Silicon/MLX
+    throughput checks
+- MLX backend strategy is now fixed to an adapter-backed implementation path:
+  - keep HTTP/service contract stable via `EmbeddingBackend` abstraction
+  - preserve `MlxBackend` as the explicit MLX adapter entry point while ONNX
+    CPU/CUDA remains the default runtime family
+  - validate MLX runtime viability through dedicated benchmark and health smoke
+    checks under `DEVICE=mlx`, `ACCELERATOR_BACKEND=mlx`
+- `scripts/accelerator_unavailable_smoke.sh` now verifies both behaviors:
+  - fail-fast path (default)
+  - fallback-to-CPU path (`EXPECT_FALLBACK=true`)
+
+## Phase 10: Embeddings-Service HTTP and Operational Behavior
+
+- [x] Implement request validation for `/embed`
+- [x] Implement batch-size limits
+- [x] Implement timeout behavior
+- [x] Implement structured JSON error responses
+- [x] Implement latency and batch-size logging
+- [x] Implement health state reporting only after successful warmup
+- [x] Add smoke tests for `/health`
+- [x] Add smoke tests for `/embed`
+- [x] Add load testing or benchmark pass for representative batch sizes
+
+Current implementation details for Phase 10 progress:
+
+- `/embed` returns structured JSON error envelopes for:
+  - invalid request payload shape
+  - oversized batches
+  - invalid input item types
+  - malformed JSON
+  - backend runtime/output-shape failures
+- Service startup now runs backend warmup and only enters serving mode on success; `/health` includes `warmup_complete: true` for ready state.
+- Added `scripts/embeddings_smoke.sh` to validate embeddings-service behavior end to end:
+  - waits for `/health` readiness
+  - verifies `ok=true` and `warmup_complete=true`
+  - verifies `/embed` response count/dimension alignment
+  - verifies oversized batch error path returns HTTP `400` + `batch_too_large`
+- `README.md` now includes usage guidance for the embeddings smoke check script.
+- `/embed` handler now emits operational request logs including:
+  - successful batch size and backend with request duration (`duration_ms`)
+  - structured rejection logs for validation failures (`invalid_request`, `invalid_json`, `invalid_input_type`, `batch_too_large`)
+  - backend failure logs with output-shape mismatch context and latency
+- `/embed` now enforces configurable request timeout behavior:
+  - reads `REQUEST_TIMEOUT_MS` from environment (default `30000`)
+  - returns structured timeout error (`code=request_timeout`) with HTTP `504` when backend embed execution exceeds timeout budget
+  - `docker-compose.yaml` now wires `REQUEST_TIMEOUT_MS` to `EMBEDDING_REQUEST_TIMEOUT_MS` by default for aligned app/service timeout tuning
+- Added `scripts/embeddings_benchmark.sh` for representative batch-size benchmarking:
+  - configurable `BATCH_SIZES` and `ITERATIONS`
+  - validates healthy service before benchmark runs
+  - reports min/p50/p95/max latency per batch size
+
+## Phase 11: Application-Side Embedding Client
+
+- [x] Implement `EmbeddingClient` in the main C++ app
+- [x] Implement `/health` check on startup
+- [x] Implement batched `/embed` calls
+- [x] Implement retry logic for transient failures
+- [x] Implement timeout handling
+- [x] Validate embedding dimension against configuration
+- [x] Surface clear errors back to harvester flow
+- [x] Add tests for success, retry, timeout, and invalid-dimension scenarios
+
+Current test coverage for Phase 11 embedding client behavior:
+
+- `tests/EmbeddingClientTest.cpp` validates:
+  - successful embedding response handling
+  - batch-size guard failures
+  - retry behavior after non-2xx responses
+  - invalid-dimension response failures
+- `CMakeLists.txt` now registers `embedding_client_test` with CTest.
+
+## Phase 12: Harvester Refactor
+
+- [x] Replace relational table initialization with vector-collection initialization
+- [x] Replace SQL upsert assumptions with Qdrant upsert flow
+- [x] Insert embedding-generation step into record ingestion flow
+- [x] Persist vectors plus payload for harvested records
+- [x] Refactor `getMissingDates()` behavior to work with Qdrant filters or checkpoints
+- [x] Decide whether backfill state lives entirely in Qdrant payloads or in a separate checkpoint mechanism
+- [x] Ensure recent harvest mode still works end to end
+- [x] Ensure backfill mode still works end to end
+- [x] Add logging around embedding failures vs storage failures
+
+Current implementation details for remaining Phase 12 mode validation:
+
+- Added `scripts/app_modes_smoke.sh` for compose-backed runtime verification that:
+  - waits for `qdrant` and `embeddings` health endpoints
+  - executes app `recent` mode through `docker-compose run --rm app`
+  - executes app `backfill` mode with configurable date range and set specs
+- `README.md` now includes usage guidance for this app-mode smoke script.
+
+## Phase 13: Expanded Metadata Harvesting (Optional but Recommended)
+
+- [ ] Decide whether to keep only `oai_dc` or add `arXiv` metadata format
+- [ ] If adding `arXiv` format:
+  - [ ] extend record model for richer metadata fields
+  - [ ] update OAI parsing logic
+  - [ ] persist new fields in Qdrant payloads
+- [ ] Decide whether to add `arXivRaw` for version history
+- [ ] If adding `arXivRaw`:
+  - [ ] extend record model for version history
+  - [ ] update parsing and persistence logic
+- [ ] Decide whether any of these additional fields should influence embedding text
+
+## Phase 14: Historical PostgreSQL Migration Utility
+
+- [x] Design migration utility entry point
+- [x] Reuse or implement PostgreSQL read path for historical records
+- [x] Read historical records in chunks
+- [x] Build embedding text for migrated records
+- [x] Batch requests to embeddings service
+- [x] Batch upserts to Qdrant
+- [x] Add checkpoint/resume support
+- [x] Add migration progress logging
+- [x] Add parity validation for counts by day, set, and identifier
+- [x] Define cutover criteria after migration completes
+
+Current implementation details for Phase 14 completion:
+
+- Added dedicated migration executable and CLI entrypoint:
+  - `src/migrate_main.cpp`
+  - supports `--chunk-size`, `--embedding-batch-size`, `--parity-sample-size`,
+    `--checkpoint-file`, and `--no-resume`
+- Added migration orchestration module:
+  - `include/migration/PostgresToQdrantMigrator.h`
+  - `src/migration/PostgresToQdrantMigrator.cpp`
+  - performs chunked PostgreSQL reads, embedding text generation, batched
+    embeddings requests, batched Qdrant upserts, checkpoint persistence, and
+    parity validation
+- Extended PostgreSQL storage APIs for migration/parity support:
+  - `fetchRecordsChunk(limit, offset)`
+  - `countRecords()`
+  - `countRecordsForDate(date)`
+  - `countRecordsForSetSpec(set_spec)`
+  - `identifierExists(identifier)`
+- Extended Qdrant storage APIs for migration/parity support:
+  - `upsertRecordsBatch(records, embeddings)`
+  - `countPoints()`
+  - `countPointsForDate(date)`
+  - `countPointsForSetSpec(set_spec)`
+  - `identifierExists(identifier)`
+- Added migration runner script:
+  - `scripts/postgres_to_qdrant_migration.sh`
+  - builds `arhida-migrate` and executes migration with environment-driven
+    runtime overrides
+- Added build integration for migration utility:
+  - `CMakeLists.txt` now defines `arhida-migrate` target and installs it
+- Checkpoint completion semantics hardened:
+  - checkpoint is marked `completed=true` only after parity validation passes
+  - parity failure persists checkpoint with `completed=false`
+
+## Phase 15: Validation and Testing
+
+### Functional Validation
+- [x] Verify Qdrant starts and persists data
+- [x] Verify embeddings service starts and reports healthy
+- [x] Verify app starts only when dependencies are ready
+- [x] Verify one record can be harvested, embedded, and stored successfully
+- [x] Verify batch ingestion works
+- [x] Verify recent mode works end to end
+- [x] Verify backfill mode works end to end
+
+Current implementation details for Phase 15 functional validation progress:
+
+- Added `scripts/qdrant_persistence_smoke.sh` to validate Qdrant startup and
+  persistence semantics across service restart:
+  - starts `qdrant` via compose and waits for `/healthz`
+  - creates a temporary collection and upserts a representative point
+  - restarts `qdrant` and verifies the same payload remains queryable via
+    scroll filter
+  - cleans up the temporary collection after verification
+- Added `scripts/embeddings_startup_health_smoke.sh` to validate embeddings
+  service startup + readiness health:
+  - starts `embeddings` via compose and waits for `/health`
+  - asserts health payload fields `ok=true` and `warmup_complete=true`
+  - verifies readiness metadata includes a positive `dimension` and non-empty
+    `backend`
+- Added `scripts/app_dependency_readiness_smoke.sh` to validate app dependency
+  readiness gating behavior:
+  - verifies app startup fails when qdrant/embeddings dependencies are down
+  - verifies startup failure output includes dependency-readiness failure signals
+  - starts dependencies, waits for both health endpoints, and verifies app
+    startup command succeeds
+- Added `scripts/one_record_ingest_smoke.sh` to validate one-record ingestion
+  flow through the full runtime path:
+  - starts qdrant + embeddings and waits for both health endpoints
+  - runs app `recent` mode with constrained harvest settings (`ARXIV_BATCH_SIZE=1`)
+  - validates Qdrant point count endpoint returns at least one stored point
+- Added `scripts/batch_ingestion_smoke.sh` to validate multi-record batch
+  ingestion behavior:
+  - runs app `recent` mode with configurable `ARXIV_BATCH_SIZE` (>1)
+  - writes to an isolated temporary collection override for repeatable runs
+  - verifies Qdrant exact point-count endpoint returns at least two persisted
+    points after ingestion
+- Added `scripts/recent_mode_e2e_smoke.sh` to validate compose-backed
+  `recent` mode end-to-end behavior:
+  - starts qdrant + embeddings and waits for both health endpoints
+  - runs app `recent` mode against an isolated temporary Qdrant collection
+  - verifies Qdrant exact point-count endpoint returns at least one persisted
+    point after run completion
+- Added `scripts/backfill_mode_e2e_smoke.sh` to validate compose-backed
+  `backfill` mode end-to-end behavior:
+  - starts qdrant + embeddings and waits for both health endpoints
+  - runs app `backfill` mode against an isolated temporary Qdrant collection
+    with configurable `--start-date`, `--end-date`, and `--set-specs`
+  - verifies Qdrant exact point-count endpoint returns at least one persisted
+    point after run completion
+
+### Data Validation
+- [x] Verify vector dimension matches configured collection dimension
+- [x] Verify payload fields are complete and correctly serialized
+- [x] Verify deterministic id generation
+- [x] Verify duplicate records update correctly
+- [x] Verify filtering by set/date still works for backfill purposes
+
+### Performance Validation
+- [x] Measure embedding throughput on CPU
+- [x] Measure embedding throughput on CUDA
+- [x] Measure embedding throughput on MLX if implemented
+- [x] Measure end-to-end ingestion throughput
+- [x] Tune batch sizes for app, embeddings service, and Qdrant writes
+
+Current implementation details for Phase 15 performance validation progress:
+
+- Added `scripts/embeddings_cpu_throughput_benchmark.sh` to run repeatable
+  embedding throughput benchmarks in CPU mode:
+  - starts embeddings with `DEVICE=cpu`, `ACCELERATOR_BACKEND=onnx`, and
+    `ORT_EXECUTION_PROVIDER=CPU`
+  - delegates benchmark execution to `scripts/embeddings_benchmark.sh`
+- Added `scripts/embeddings_cuda_throughput_benchmark.sh` to run repeatable
+  embedding throughput benchmarks in CUDA mode:
+  - starts embeddings with `DEVICE=cuda`, `ACCELERATOR_BACKEND=onnx`, and
+    `ORT_EXECUTION_PROVIDER=CUDA`
+  - enforces fail-fast accelerator behavior with
+    `ACCELERATOR_FALLBACK_TO_CPU=false`
+  - delegates benchmark execution to `scripts/embeddings_benchmark.sh`
+- Added `scripts/embeddings_mlx_throughput_benchmark.sh` to run repeatable
+  embedding throughput benchmarks in MLX mode:
+  - starts embeddings with `DEVICE=mlx` and `ACCELERATOR_BACKEND=mlx`
+  - enforces fail-fast accelerator behavior with
+    `ACCELERATOR_FALLBACK_TO_CPU=false`
+  - delegates benchmark execution to `scripts/embeddings_benchmark.sh`
+- Added `scripts/ingestion_throughput_benchmark.sh` to measure end-to-end
+  ingestion throughput and provide batch-size tuning sweeps:
+  - starts qdrant + embeddings and waits for health readiness
+  - runs app `recent` mode across configurable app batch sizes and iterations
+  - captures per-run records persisted, duration, and computed records/sec
+  - supports tuning knobs for `APP_BATCH_SIZES` and `EMBED_BATCH_SIZE`
+
+### Failure Validation
+- [x] Verify behavior when embeddings service is unavailable
+- [x] Verify behavior when Qdrant is unavailable
+- [x] Verify behavior when model artifacts are missing
+- [x] Verify behavior when accelerator is requested but unavailable
+- [x] Verify retry behavior under transient failures
+
+Current implementation details for Phase 15 failure validation progress:
+
+- Added `scripts/embeddings_unavailable_smoke.sh` to assert fail-fast startup behavior when embeddings is down:
+  - starts only `qdrant`
+  - explicitly stops `embeddings`
+  - runs app in `recent` mode via compose and expects non-zero exit
+  - asserts startup output contains `Embeddings service health check failed during startup`
+- Added `scripts/qdrant_unavailable_smoke.sh` to assert fail-fast startup/storage behavior when qdrant is down:
+  - starts only `embeddings`
+  - explicitly stops `qdrant`
+  - runs app in `recent` mode via compose and expects non-zero exit
+  - asserts startup output contains `Qdrant request failed`
+- Added `scripts/model_artifacts_missing_smoke.sh` to assert embeddings service startup failure when required artifacts are absent:
+  - runs embeddings service with `STRICT_MODEL_VALIDATION=true`
+  - overrides `MODEL_PATH` and `TOKENIZER_PATH` to intentionally missing paths
+  - expects non-zero startup exit and asserts output contains `Model artifact not found at:`
+- Added `scripts/embedding_retry_transient_smoke.sh` to assert transient retry behavior for embeddings requests:
+  - starts `qdrant` and a dedicated mock embeddings HTTP service container on the compose network
+  - mock service returns HTTP `500` on the first `/embed` call, then returns a valid vector response
+  - runs app `recent` mode with `EMBEDDING_SERVICE_URL` overridden to mock service
+  - asserts app run succeeds and verifies mock `/stats` reports at least two `/embed` calls with exactly one transient failure
+- Added `scripts/accelerator_unavailable_smoke.sh` to assert fail-fast behavior when an unavailable accelerator mode is requested:
+  - runs embeddings service with `DEVICE=cuda-unavailable` and `ACCELERATOR_BACKEND=onnx`
+  - expects non-zero startup exit and asserts output contains `Unsupported embedding backend/device combination`
+- Added `scripts/qdrant_idempotent_upsert_smoke.sh` for data-validation coverage of deterministic IDs and update semantics:
+  - derives Qdrant point IDs via the same FNV-1a strategy used in `QdrantStorage::makePointId`
+  - verifies the same identifier produces the same point ID and distinct identifiers produce distinct IDs for smoke inputs
+  - upserts the same point ID twice with changed payload and asserts final scroll result contains a single point with updated payload values
+- Added `scripts/qdrant_dimension_payload_smoke.sh` for data-validation coverage of collection dimension and payload serialization:
+  - creates a temporary collection and asserts Qdrant-reported vector size equals configured `VECTOR_SIZE`
+  - upserts a representative point containing `header_*` and `metadata_*` payload fields used by `QdrantStorage`
+  - asserts required payload keys are present with expected JSON types after scroll retrieval
+- Added `scripts/qdrant_set_date_filter_smoke.sh` for data-validation coverage of backfill filtering semantics:
+  - creates a temporary collection and upserts representative records spanning matching and non-matching set/date combinations
+  - runs a Qdrant scroll filter using `header_setSpecs` (`match.any`) + `header_datestamp` range bounds
+  - verifies only expected dates are matched and missing-date derivation aligns with backfill expectations
+
+## Phase 16: Documentation and Operations
+
+- [x] Update `README.md` for the new architecture
+- [x] Update `.env.example`
+- [x] Update Docker usage instructions
+- [x] Document model artifact preparation and volume mounting
+- [x] Document CPU, CUDA, and MLX deployment modes
+- [x] Document how to rebuild or recreate a Qdrant collection
+- [x] Document migration workflow from PostgreSQL to Qdrant
+- [x] Document backup/restore strategy for Qdrant storage
+- [x] Document operational health checks and expected endpoints
+
+## Phase 17: Cutover and Cleanup
+
+- [x] Define go-live criteria
+- [x] Run historical migration if in scope
+- [x] Validate parity against PostgreSQL
+- [x] Switch primary runtime persistence to Qdrant
+- [x] Disable or remove PostgreSQL dependency from normal runtime path
+- [x] Remove `libpq` from the main application build if no longer needed
+- [x] Remove obsolete Postgres-only documentation
+- [x] Tag/release the migrated architecture
+
+Go-live criteria definition (Phase 17):
+
+- Migration execution criteria:
+  - historical migration utility completes with exit code `0`
+  - checkpoint file reports `completed=true`
+  - no unrecovered chunk-level migration failures in logs
+- Data parity criteria:
+  - parity validation pass at migration completion (total count parity)
+  - sampled identifier parity passes
+  - sampled date parity passes
+  - sampled set-spec parity passes
+- Runtime readiness criteria:
+  - `VECTOR_DB_PROVIDER=qdrant` configured for application runtime
+  - Qdrant `/healthz` and embeddings `/health` endpoints healthy
+  - `recent` and `backfill` smoke workflows pass against Qdrant runtime path
+- Operational safety criteria:
+  - rollback plan documented (retain PostgreSQL runtime compatibility until
+    cutover sign-off)
+  - Qdrant backup/restore procedure validated before final Postgres teardown
+  - CI workflow for branch or release commit is green before final cutover
+
+Current implementation details for Phase 17 progress:
+
+- `docker-compose.yaml` app runtime no longer injects PostgreSQL credentials or
+  Docker Postgres secret file paths for normal app execution.
+- Compose app runtime now hard-pins `VECTOR_DB_PROVIDER=qdrant` and depends on
+  `qdrant` + `embeddings` services for default operational flow.
+- Compose-level Postgres secrets block was removed from normal runtime
+  orchestration.
+- `README.md` updated to reflect PostgreSQL is migration-tooling-only and that
+  normal compose runtime executes on Qdrant + embeddings.
+- `src/main.cpp` runtime bootstrap now enforces
+  `VECTOR_DB_PROVIDER=qdrant` and fails fast for non-Qdrant app runtime
+  providers, while initializing `QdrantStorage` as the primary runtime
+  persistence backend.
+- Main CMake build path now decouples application runtime from `libpq`:
+  - `arhida-cpp` no longer compiles `src/db/Database.cpp` or links `${LIBPQ_LIBRARIES}`
+  - `libpq` discovery/build wiring is gated behind `BUILD_MIGRATION_TOOL`
+    (default `OFF`)
+  - migration utility (`arhida-migrate`) still supports PostgreSQL by enabling
+    `-DBUILD_MIGRATION_TOOL=ON` (now set by `scripts/postgres_to_qdrant_migration.sh`)
+- CI workflow test runtime path now matches Qdrant cutover:
+  - `.github/workflows/build.yml` test job uses a `qdrant` service plus an in-job mock embeddings HTTP server
+  - test container runtime env now sets `VECTOR_DB_PROVIDER=qdrant` with Qdrant and embeddings endpoints
+  - health wait gates are enforced for `qdrant /healthz` and `embeddings /health` before test execution
+- `docs/cpp_transition.md` was reduced to an archived transition note and now points to
+  `docs/vector_db_migration_plan.md` as the active migration source of truth.
+- Added migration E2E smoke harness using containerized ephemeral dependencies:
+  - `scripts/postgres_to_qdrant_migration_smoke.sh`
+  - validated with `podman` runtime:
+    - seeds PostgreSQL source records
+    - runs `scripts/postgres_to_qdrant_migration.sh`
+    - verifies checkpoint `completed=true`
+    - verifies Qdrant point-count parity for migrated sample data
+- Main build now links migration binary with discovered `libpq` library directory:
+  - `CMakeLists.txt` adds `target_link_directories(arhida-migrate PRIVATE ${LIBPQ_LIBRARY_DIRS})`
+  - resolves `ld: library 'pq' not found` on local migration-tool builds.
+
+Release/tag status for Phase 17:
+
+- migration architecture completion checkpoint tag: `vector-db-migration-complete`
+
+---
+
+## Phase 5: Harvester Changes
+
+`Harvester` must stop depending on relational database behavior.
+
+### Current Behavior to Replace
+
+- `ensureTableExists()`
+  - replace with collection initialization
+- SQL upsert string construction
+  - replace with Qdrant point upsert requests
+- SQL missing-date query
+  - replace with payload filter queries
+
+### Updated Flow
+
+1. harvest record from arXiv
+2. normalize metadata
+3. build embedding input text
+4. request embedding
+5. upsert vector point into Qdrant
+6. store raw metadata as payload
+
+---
+
+## Phase 6: Existing Data Migration
+
+The existing PostgreSQL dataset should be migrated with a one-time utility.
+
+### Migration Utility Responsibilities
+
+- read all existing rows from PostgreSQL
+- convert each row into the new payload format
+- generate embeddings
+- upsert into Qdrant
+- log failures and resume safely
+
+### Validation Checks
+
+- total record counts match
+- counts by `set_spec` match
+- counts by date match
+- random sampling confirms metadata parity
+- duplicate `header_identifier` handling is stable
+
+### Recommended Rollout Strategy
+
+1. migrate historical data
+2. run parity validation
+3. cut app writes to Qdrant
+4. decommission Postgres dependency after verification
+
+---
+
+## Phase 7: Build System Changes
+
+### Current Build Dependency to Remove Later
+
+- `libpq`
+
+### Dependencies to Keep Using
+
+- `libcurl`
+- `libxml2`
+- `nlohmann/json`
+- `spdlog`
+
+### Build Transition Strategy
+
+- keep `libpq` only while migration tooling requires it
+- remove `libpq` from `CMakeLists.txt` once Qdrant is fully adopted
+
+---
+
+## Phase 8: Documentation Updates
+
+Update all user-facing and operational docs:
+
+- `README.md`
+- `.env.example`
+- `docs/cpp_transition.md`
+- Docker usage examples
+
+### New Documentation Topics
+
+- how to run Qdrant locally
+- how to configure vector collection settings
+- how embedding configuration works
+- how to perform migration from PostgreSQL
+- how to back up and restore Qdrant storage
+
+---
+
+## Risks and Open Questions
+
+## Risk 1: No Embedding Strategy Yet
+
+This is the biggest architectural gap.
+
+If embeddings are not generated, Qdrant does not provide the intended vector-search capability.
+
+## Risk 2: Backfill Logic Is Harder in a Pure Vector Store
+
+The current backfill logic relies on querying existing dates efficiently. This must be reimplemented using Qdrant payload filters or a separate checkpoint/state mechanism.
+
+## Risk 3: Vector DB Alone May Not Replace All Relational Use Cases
+
+If the system needs strong tabular reporting, analytics, or administrative querying, a hybrid design may still be better.
+
+## Risk 4: Migration Complexity
+
+The current code is hard-coded to PostgreSQL semantics. Migration will touch config, storage, batching, data validation, and documentation.
+
+---
+
+## Recommended Delivery Sequence
+
+### Milestone 1: Compose and Config
+
+- add Qdrant service
+- add vector env vars
+- stop assuming external Postgres at runtime
+
+### Milestone 2: Storage Abstraction
+
+- introduce `StorageEngine`
+- isolate harvester from SQL concepts
+
+### Milestone 3: Embeddings + Qdrant Writes
+
+- implement `EmbeddingClient`
+- implement `QdrantStorage`
+- upsert harvested records into Qdrant
+
+### Milestone 4: Backfill Compatibility
+
+- rebuild missing-date detection using payload filters or checkpoints
+
+### Milestone 5: Historical Migration
+
+- migrate PostgreSQL records
+- validate parity
+
+### Milestone 6: Cleanup
+
+- remove `libpq`
+- remove old Postgres env vars and docs
+- simplify compose and deployment docs
+
+---
+
+## Suggested Success Criteria
+
+Migration is complete when all of the following are true:
+
+- Qdrant starts from `docker-compose.yaml`
+- data persists in a Docker volume
+- new harvests write vectors and payload successfully
+- backfill logic still works
+- historical PostgreSQL data is migrated
+- PostgreSQL is no longer required for normal runtime operation
+- docs reflect the new architecture clearly
+
+---
+
+## Recommended Next Implementation Step
+
+Start with these three concrete changes:
+
+1. update `docker-compose.yaml` to add a Qdrant service and persistent volume
+2. refactor `Config` to support vector-database settings
+3. scaffold a `QdrantStorage` class behind a storage abstraction while keeping Postgres only for migration validation
+
+---
+
+## Endnote: Embeddings Deployment Tradeoffs
+
+There are two viable ways to introduce embeddings into this system:
+
+1. build embedding generation directly into the existing harvester application
+2. run embedding generation as a separate service and call it from the harvester
+
+### Separate `embeddings` Service
+
+**Pros**
+
+- clear separation of responsibilities between harvesting and inference
+- easier model swaps and experimentation
+- better runtime isolation for CPU/GPU-heavy inference
+- more operational flexibility for restarts and scaling
+- allows the embedding stack to use Python/inference-native tooling
+- better long-term fit for larger ingestion pipelines
+
+**Cons**
+
+- more operational complexity
+- more service-to-service failure modes
+- added request/serialization latency
+- more moving parts in local development
+- extra API/version coordination between app and embeddings service
+
+### Embeddings Built Into the Existing Application
+
+**Pros**
+
+- simpler deployment shape
+- lower integration overhead
+- easier end-to-end debugging in early development
+- potentially faster initial delivery
+
+**Cons**
+
+- tighter coupling in the main application
+- harder model/provider changes later
+- more resource contention inside the harvester process
+- more friction if local inference must be implemented in or tightly coordinated with C++
+- harder reuse by other components later
+
+### Why This Plan Chooses a Separate Service
+
+This migration plan chooses a **separate local embeddings service** because the target architecture now explicitly includes local model hosting. Once the project commits to local inference, the separation benefits outweigh the added operational overhead:
+
+- model lifecycle and inference tuning stay isolated from harvesting logic
+- CPU/GPU concerns are separated from the main C++ ingestion runtime
+- the app can remain focused on arXiv harvesting and Qdrant persistence
+- future reuse and scaling paths remain open

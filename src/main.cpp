@@ -8,11 +8,14 @@
 #include <CLI/CLI.hpp>
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "config/Config.h"
-#include "db/Database.h"
+#include "db/QdrantStorage.h"
+#include "db/StorageEngine.h"
+#include "embedding/EmbeddingClient.h"
 #include "harvester/Harvester.h"
 #include "oai/OaiClient.h"
 #include "utils/Logger.h"
@@ -60,12 +63,28 @@ int main(int argc, char **argv) {
   int total_records = 0;
 
   try {
-    // Initialize database connection
-    Database db;
-    db.connect();
+    if (config.getVectorDbProvider() == "qdrant") {
+      EmbeddingClient embedding_client;
+      if (!embedding_client.healthCheck()) {
+        throw std::runtime_error(
+            "Embeddings service health check failed during startup");
+      }
+      spdlog::info("Embeddings service health check passed");
+    }
+
+    if (config.getVectorDbProvider() != "qdrant") {
+      throw std::runtime_error(
+          "Unsupported VECTOR_DB_PROVIDER for app runtime. Expected: qdrant");
+    }
+
+    // Runtime cutover: app now runs on Qdrant persistence only.
+    std::unique_ptr<StorageEngine> storage = std::make_unique<QdrantStorage>();
+    spdlog::info("Using Qdrant storage backend");
+
+    storage->connect();
 
     // Initialize harvester
-    Harvester harvester(db);
+    Harvester harvester(*storage);
 
     if (mode == "recent" || mode == "both") {
       spdlog::info("Starting recent harvest...");
@@ -79,7 +98,7 @@ int main(int argc, char **argv) {
     }
 
     // Clean up
-    db.disconnect();
+    storage->disconnect();
 
   } catch (const std::exception &e) {
     spdlog::error("Fatal error: {}", e.what());

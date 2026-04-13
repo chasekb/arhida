@@ -27,6 +27,7 @@ Makefile
 # Logs
 logs/
 *.log
+.migration/
 
 # Environment
 .env

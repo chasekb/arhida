@@ -1,0 +1,85 @@
+cmake_minimum_required(VERSION 3.16)
+project(arhida-embeddings-service VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.2
+)
+FetchContent_MakeAvailable(json)
+
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.12.0
+)
+FetchContent_MakeAvailable(spdlog)
+
+find_package(Drogon CONFIG QUIET)
+if(NOT Drogon_FOUND)
+    # Keep container builds under CI/tooling time budgets by minimizing Drogon
+    # components that are unnecessary for the embeddings runtime binary.
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(BUILD_CTL OFF CACHE BOOL "" FORCE)
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_ORM OFF CACHE BOOL "" FORCE)
+    set(BUILD_BROTLI OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        drogon
+        GIT_REPOSITORY https://github.com/drogonframework/drogon.git
+        GIT_TAG v1.9.7
+    )
+    FetchContent_MakeAvailable(drogon)
+endif()
+
+set(DROGON_LINK_TARGET "")
+if(TARGET Drogon::Drogon)
+    set(DROGON_LINK_TARGET Drogon::Drogon)
+elseif(TARGET drogon)
+    set(DROGON_LINK_TARGET drogon)
+elseif(TARGET Drogon)
+    set(DROGON_LINK_TARGET Drogon)
+else()
+    message(FATAL_ERROR "No Drogon link target found after configuration")
+endif()
+
+find_package(ONNXRuntime CONFIG QUIET)
+
+# ONNX Runtime is intentionally linked as an interface dependency in Phase 6.
+# Concrete model/session usage is introduced in Phase 8.
+if(NOT ONNXRuntime_FOUND)
+    add_library(onnxruntime_external INTERFACE)
+    if(DEFINED ENV{ONNXRUNTIME_ROOT})
+        target_include_directories(onnxruntime_external INTERFACE $ENV{ONNXRUNTIME_ROOT}/include)
+        target_link_directories(onnxruntime_external INTERFACE $ENV{ONNXRUNTIME_ROOT}/lib)
+        target_link_libraries(onnxruntime_external INTERFACE onnxruntime)
+    endif()
+else()
+    add_library(onnxruntime_external INTERFACE)
+    target_link_libraries(onnxruntime_external INTERFACE ONNXRuntime::ONNXRuntime)
+endif()
+
+add_executable(arhida-embeddings-service
+    src/main.cpp
+    src/config/EmbeddingServiceConfig.cpp
+    src/embedding/BackendFactory.cpp
+    src/embedding/OnnxCpuBackend.cpp
+    src/embedding/OnnxCudaBackend.cpp
+    src/embedding/MlxBackend.cpp
+    src/server/HttpServer.cpp
+)
+
+target_include_directories(arhida-embeddings-service PRIVATE include)
+
+target_link_libraries(arhida-embeddings-service
+    ${DROGON_LINK_TARGET}
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+    onnxruntime_external
+)
