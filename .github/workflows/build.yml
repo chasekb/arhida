@@ -17,6 +17,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   EMBEDDINGS_IMAGE_NAME: ${{ github.repository_owner }}/arhida-embeddings
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   embeddings:
