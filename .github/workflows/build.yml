@@ -55,7 +55,7 @@ jobs:
       - name: Build and push embeddings image
         uses: docker/build-push-action@v5
         with:
-          context: ./embeddings_service
+          context: .
           file: ./embeddings_service/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
