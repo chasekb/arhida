@@ -22,7 +22,7 @@ The active migration target is:
 
 - `app` (`ghcr.io/chasekb/arhida:latest`)
 - `qdrant` (`qdrant/qdrant:latest`)
-- `embeddings` (`ghcr.io/chasekb/arhida-embeddings:local`)
+- `embeddings` (`ghcr.io/chasekb/arhida-embeddings:latest`)
 
 Health endpoints used in compose:
 
@@ -111,7 +111,7 @@ ACCELERATOR_FALLBACK_TO_CPU=true docker-compose up -d embeddings
 ## Model Artifacts and Volume Mounting
 
 The embeddings container expects model artifacts mounted read-only from the
-`model-files` volume.
+local `./models` directory.
 
 Expected layout:
 
@@ -128,7 +128,8 @@ Expected layout:
 
 Compose wiring (already present in `docker-compose.yaml`):
 
-- `model-files:/models:ro`
+- `embeddings` is pulled from `ghcr.io/chasekb/arhida-embeddings:latest`
+- the service still mounts local model artifacts from `./models:/models:ro`
 - `MODEL_PATH=/models/bge-small-en-v1.5/model.onnx`
 - `TOKENIZER_PATH=/models/bge-small-en-v1.5/tokenizer`
 

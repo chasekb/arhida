@@ -62,10 +62,7 @@ services:
       start_period: 10s
 
   embeddings:
-    build:
-      context: .
-      dockerfile: embeddings_service/Dockerfile
-    image: arhida-embeddings:local
+    image: ghcr.io/chasekb/arhida-embeddings:latest
     container_name: arhida-embeddings
     ports:
       - "8000:8000"

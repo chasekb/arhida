@@ -330,7 +330,7 @@ services:
       - VECTOR_SIZE=384
 
   embeddings:
-    image: ghcr.io/chasekb/arhida-embeddings:local
+    image: ghcr.io/chasekb/arhida-embeddings:latest
     container_name: arhida-embeddings
     ports:
       - "8000:8000"
