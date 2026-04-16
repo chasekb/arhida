@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libstdc++6 \
     libgcc-s1 \
+    libjsoncpp25 \
     libssl3 \
     zlib1g \
     libuuid1 \
