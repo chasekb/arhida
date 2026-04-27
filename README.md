@@ -219,6 +219,20 @@ Current migration posture:
 - keyset pagination (`id > last_row_id`) in migrator read path
 - checkpoint resume with both `offset` and `last_row_id`
 - optional C++ embeddings service launched via Podman container (`USE_CPP_EMBEDDINGS_SERVICE=true`)
+- stage-aware execution with `MIGRATION_STAGE=migrate|verify|all`
+
+For a two-step cutover, use the wrapper script:
+
+```bash
+MIGRATION_STAGE=migrate bash scripts/postgres_to_qdrant_migration.sh
+MIGRATION_STAGE=verify bash scripts/postgres_to_qdrant_migration.sh
+```
+
+Or run both stages in sequence:
+
+```bash
+bash scripts/postgres_to_qdrant_cutover.sh
+```
 
 Recommended migration invocation:
 

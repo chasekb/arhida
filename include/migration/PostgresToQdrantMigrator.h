@@ -17,6 +17,8 @@ public:
     std::string checkpoint_file =
         ".migration/postgres_to_qdrant_checkpoint.json";
     bool resume = true;
+    bool migrate_only = false;
+    bool verify_only = false;
   };
 
   explicit PostgresToQdrantMigrator(Options options);

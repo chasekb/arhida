@@ -20,6 +20,10 @@ int main(int argc, char **argv) {
   PostgresToQdrantMigrator::Options options;
   bool no_resume = false;
 
+  app.add_flag("--migrate-only", options.migrate_only,
+               "Run the data transfer stage without parity verification");
+  app.add_flag("--verify-only", options.verify_only,
+               "Run parity verification against an existing migration");
   app.add_option("--chunk-size", options.chunk_size,
                  "Number of PostgreSQL records fetched per migration chunk")
       ->default_val(options.chunk_size);

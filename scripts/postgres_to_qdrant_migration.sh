@@ -11,6 +11,7 @@ PARITY_SAMPLE_SIZE="${PARITY_SAMPLE_SIZE:-25}"
 RESUME="${RESUME:-true}"
 AUTO_CHECKPOINT_RESUME="${AUTO_CHECKPOINT_RESUME:-true}"
 USE_CPP_EMBEDDINGS_SERVICE="${USE_CPP_EMBEDDINGS_SERVICE:-true}"
+MIGRATION_STAGE="${MIGRATION_STAGE:-all}"
 CPP_EMBEDDINGS_URL="${CPP_EMBEDDINGS_URL:-http://127.0.0.1:18000}"
 CPP_EMBEDDINGS_IMAGE="${CPP_EMBEDDINGS_IMAGE:-localhost/arhida-embeddings-cpp:local}"
 CPP_EMBEDDINGS_CONTAINER="${CPP_EMBEDDINGS_CONTAINER:-arhida-embeddings-migration-cpp}"
@@ -120,6 +121,15 @@ fi
 
 mkdir -p "${CHECKPOINT_DIR}"
 
+case "${MIGRATION_STAGE}" in
+  all|migrate|verify)
+    ;;
+  *)
+    echo "[migration] invalid MIGRATION_STAGE=${MIGRATION_STAGE}. Expected all, migrate, or verify."
+    exit 1
+    ;;
+esac
+
 echo "[migration] building migration image ${MIGRATION_IMAGE}"
 podman build --pull=missing \
   --build-arg BUILD_MIGRATION_TOOL=ON \
@@ -137,7 +147,20 @@ if [[ "${RESUME}" != "true" ]]; then
   ARGS+=(--no-resume)
 fi
 
-echo "[migration] running PostgreSQL -> Qdrant migration"
+case "${MIGRATION_STAGE}" in
+  migrate)
+    ARGS+=(--migrate-only)
+    echo "[migration] running PostgreSQL -> Qdrant migration stage"
+    ;;
+  verify)
+    ARGS+=(--verify-only)
+    echo "[migration] running PostgreSQL -> Qdrant verification stage"
+    ;;
+  all)
+    echo "[migration] running PostgreSQL -> Qdrant migration and verification"
+    ;;
+esac
+
 podman run --rm \
   --pull=never \
   --network=host \

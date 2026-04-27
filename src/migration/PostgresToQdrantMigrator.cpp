@@ -37,23 +37,38 @@ PostgresToQdrantMigrator::PostgresToQdrantMigrator(Options options)
     : options_(std::move(options)) {}
 
 int PostgresToQdrantMigrator::run() {
+  if (options_.migrate_only && options_.verify_only) {
+    throw std::runtime_error(
+        "Migration stage selection is invalid: choose migrate-only or "
+        "verify-only, not both");
+  }
+
   Database postgres;
   QdrantStorage qdrant;
-  EmbeddingClient embedding_client;
 
   postgres.connect();
   qdrant.connect();
   qdrant.initialize();
 
-  if (!embedding_client.healthCheck()) {
-    throw std::runtime_error(
-        "Embeddings service health check failed before migration");
+  EmbeddingClient embedding_client;
+  if (!options_.verify_only) {
+    if (!embedding_client.healthCheck()) {
+      throw std::runtime_error(
+          "Embeddings service health check failed before migration");
+    }
   }
 
   const auto total_source_records = postgres.countRecords();
   if (total_source_records == 0) {
-    spdlog::info("No PostgreSQL records found. Nothing to migrate.");
-    return 0;
+    if (options_.verify_only) {
+      spdlog::info(
+          "No PostgreSQL records found. Verifying empty source and target.");
+      const bool parity_ok = runParityValidation(options_.parity_sample_size);
+      return parity_ok ? 0 : 2;
+    } else {
+      spdlog::info("No PostgreSQL records found. Nothing to migrate.");
+      return 0;
+    }
   }
 
   CheckpointState state = loadCheckpoint();
@@ -67,7 +82,20 @@ int PostgresToQdrantMigrator::run() {
 
   if (state.completed && state.offset >= total_source_records) {
     spdlog::info("Migration checkpoint is already marked completed.");
+    if (options_.migrate_only) {
+      return 0;
+    }
     const bool parity_ok = runParityValidation(options_.parity_sample_size);
+    return parity_ok ? 0 : 2;
+  }
+
+  if (options_.verify_only) {
+    spdlog::info("Running PostgreSQL -> Qdrant parity verification only");
+    const bool parity_ok = runParityValidation(options_.parity_sample_size);
+    if (parity_ok && !state.completed) {
+      state.completed = true;
+      persistCheckpoint(state, "");
+    }
     return parity_ok ? 0 : 2;
   }
 
@@ -132,6 +160,15 @@ int PostgresToQdrantMigrator::run() {
         "last_identifier={}",
         state.offset, total_source_records, percent, state.migrated_records,
         last_identifier);
+  }
+
+  if (options_.migrate_only) {
+    spdlog::info(
+        "Migration stage completed without parity verification. Run the "
+        "verify stage to confirm cutover readiness.");
+    state.completed = false;
+    persistCheckpoint(state, "");
+    return 0;
   }
 
   const bool parity_ok = runParityValidation(options_.parity_sample_size);
