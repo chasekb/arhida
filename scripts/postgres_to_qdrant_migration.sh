@@ -12,10 +12,25 @@ RESUME="${RESUME:-true}"
 AUTO_CHECKPOINT_RESUME="${AUTO_CHECKPOINT_RESUME:-true}"
 USE_CPP_EMBEDDINGS_SERVICE="${USE_CPP_EMBEDDINGS_SERVICE:-true}"
 MIGRATION_STAGE="${MIGRATION_STAGE:-all}"
-CPP_EMBEDDINGS_URL="${CPP_EMBEDDINGS_URL:-http://127.0.0.1:18000}"
+MIGRATION_PODMAN_NETWORK="${MIGRATION_PODMAN_NETWORK:-db_prdnet}"
+CONTAINER_BRIDGE_HOST="${CONTAINER_BRIDGE_HOST:-host.containers.internal}"
 CPP_EMBEDDINGS_IMAGE="${CPP_EMBEDDINGS_IMAGE:-localhost/arhida-embeddings-cpp:local}"
 CPP_EMBEDDINGS_CONTAINER="${CPP_EMBEDDINGS_CONTAINER:-arhida-embeddings-migration-cpp}"
 MIGRATION_IMAGE="${MIGRATION_IMAGE:-localhost/arhida-migrate:local}"
+
+if [[ "${MIGRATION_PODMAN_NETWORK}" == "host" ]]; then
+  POSTGRES_HOST="${POSTGRES_HOST:-host.containers.internal}"
+  QDRANT_URL="${QDRANT_URL:-http://127.0.0.1:6333}"
+  EMBEDDING_SERVICE_URL="${EMBEDDING_SERVICE_URL:-http://127.0.0.1:8000}"
+  CPP_EMBEDDINGS_URL="${CPP_EMBEDDINGS_URL:-http://127.0.0.1:18000}"
+  PODMAN_NETWORK_ARGS=(--network=host)
+else
+  POSTGRES_HOST="${POSTGRES_HOST:-postgres}"
+  QDRANT_URL="${QDRANT_URL:-http://${CONTAINER_BRIDGE_HOST}:6333}"
+  EMBEDDING_SERVICE_URL="${EMBEDDING_SERVICE_URL:-http://${CONTAINER_BRIDGE_HOST}:8000}"
+  CPP_EMBEDDINGS_URL="${CPP_EMBEDDINGS_URL:-http://${CONTAINER_BRIDGE_HOST}:18000}"
+  PODMAN_NETWORK_ARGS=(--network="${MIGRATION_PODMAN_NETWORK}")
+fi
 
 STARTED_CPP_EMBED_CONTAINER="false"
 mkdir -p "${ROOT_DIR}/logs"
@@ -68,9 +83,6 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "${USE_CPP_EMBEDDINGS_SERVICE}" == "true" ]]; then
-  EMBEDDING_SERVICE_URL="${EMBEDDING_SERVICE_URL:-${CPP_EMBEDDINGS_URL}}"
-  export EMBEDDING_SERVICE_URL
-
   if ! curl -fsS "${EMBEDDING_SERVICE_URL}/health" >/dev/null 2>&1; then
     echo "[migration] building cpp embeddings container ${CPP_EMBEDDINGS_IMAGE}"
     podman build --pull=missing -t "${CPP_EMBEDDINGS_IMAGE}" \
@@ -163,9 +175,19 @@ esac
 
 podman run --rm \
   --pull=never \
-  --network=host \
-  --env-host \
-  -e EMBEDDING_SERVICE_URL="${EMBEDDING_SERVICE_URL:-}" \
+  "${PODMAN_NETWORK_ARGS[@]}" \
+  -e VECTOR_DB_PROVIDER=qdrant \
+  -e POSTGRES_HOST="${POSTGRES_HOST}" \
+  -e POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
+  -e POSTGRES_DB="${POSTGRES_DB:-}" \
+  -e POSTGRES_USER="${POSTGRES_USER:-}" \
+  -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}" \
+  -e POSTGRES_SCHEMA="${POSTGRES_SCHEMA:-arxiv}" \
+  -e POSTGRES_TABLE="${POSTGRES_TABLE:-metadata}" \
+  -e QDRANT_URL="${QDRANT_URL}" \
+  -e QDRANT_COLLECTION="${QDRANT_COLLECTION:-arxiv_metadata}" \
+  -e VECTOR_SIZE="${VECTOR_SIZE:-384}" \
+  -e EMBEDDING_SERVICE_URL="${EMBEDDING_SERVICE_URL}" \
   -v "${CHECKPOINT_DIR}:/checkpoint:Z" \
   "${MIGRATION_IMAGE}" \
   /app/arhida-migrate \

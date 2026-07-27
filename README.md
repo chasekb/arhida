@@ -220,6 +220,7 @@ Current migration posture:
 - checkpoint resume with both `offset` and `last_row_id`
 - optional C++ embeddings service launched via Podman container (`USE_CPP_EMBEDDINGS_SERVICE=true`)
 - stage-aware execution with `MIGRATION_STAGE=migrate|verify|all`
+- Podman network override for the source database with `MIGRATION_PODMAN_NETWORK=db_prdnet`
 
 For a two-step cutover, use the wrapper script:
 
@@ -232,6 +233,27 @@ Or run both stages in sequence:
 
 ```bash
 bash scripts/postgres_to_qdrant_cutover.sh
+```
+
+Podman Compose note:
+
+`podman-compose run` cannot join the external `db_prdnet` network with the
+current compose file. For network-aware migration, use
+`scripts/postgres_to_qdrant_migration.sh` or a plain `podman run` invocation.
+
+If your PostgreSQL endpoint is published on the host, the legacy host-based
+form is:
+
+```bash
+POSTGRES_HOST=host.containers.internal \
+POSTGRES_PORT=5432 \
+POSTGRES_DB=unordered_map \
+POSTGRES_USER=postgres \
+POSTGRES_PASSWORD='<password>' \
+POSTGRES_SCHEMA=priority_queue \
+POSTGRES_TABLE=arxiv \
+QDRANT_COLLECTION=arxiv_metadata_from_postgres_YYYYMMDD \
+bash scripts/postgres_to_qdrant_migration.sh
 ```
 
 Recommended migration invocation:
@@ -275,13 +297,13 @@ curl -sS http://127.0.0.1:7633/collections/<collection>/points/count \
 
 ## Backup and Restore (Qdrant Storage)
 
-Qdrant data is persisted in the `qdrant-storage` Docker volume.
+Qdrant data is persisted in the project-local bind mount at `data/qdrant/`.
 
 Backup:
 
 ```bash
 docker run --rm \
-  -v qdrant-storage:/source \
+  -v "$PWD/data/qdrant":/source:ro \
   -v "$PWD":/backup \
   alpine tar czf /backup/qdrant-storage-backup.tgz -C /source .
 ```
@@ -290,7 +312,7 @@ Restore:
 
 ```bash
 docker run --rm \
-  -v qdrant-storage:/target \
+  -v "$PWD/data/qdrant":/target \
   -v "$PWD":/backup \
   alpine sh -c "cd /target && tar xzf /backup/qdrant-storage-backup.tgz"
 ```

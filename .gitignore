@@ -29,6 +29,9 @@ logs/
 *.log
 .migration/
 
+# Project-local container bind mounts / runtime state
+data/qdrant/
+
 # Environment
 .env
 .env.local
