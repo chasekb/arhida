@@ -95,7 +95,8 @@ CUDA-enabled:
 DEVICE=cuda ORT_EXECUTION_PROVIDER=CUDA ACCELERATOR_BACKEND=onnx docker-compose up -d
 ```
 
-Apple Silicon / MLX development path:
+Apple Silicon / MLX development-only path (separately validated; not part of
+the supported Compose deployment contract):
 
 ```bash
 DEVICE=mlx ACCELERATOR_BACKEND=mlx docker-compose up -d
@@ -107,6 +108,13 @@ configuration is requested):
 ```bash
 ACCELERATOR_FALLBACK_TO_CPU=true docker-compose up -d embeddings
 ```
+
+CUDA requires a CUDA-capable host, a compatible NVIDIA driver, and a runtime
+image with the matching ONNX Runtime CUDA dependencies. Compose does not
+reserve or pass through a GPU, so operators must provide GPU access to the
+embeddings container separately; setting `DEVICE=cuda` alone does not make a
+CPU-only host CUDA-capable. MLX is a development/validation path only and is
+not an operational promise of the Compose image.
 
 ## Model Artifacts and Volume Mounting
 
@@ -160,8 +168,10 @@ Compose wiring (already present in `docker-compose.yaml`):
 curl -fsS http://localhost:8000/health | jq
 ```
 
-The service startup will fail fast when `MODEL_PATH` or tokenizer assets are
-missing, preventing partial/misconfigured deployments.
+The service startup will fail fast when `MODEL_PATH` (`model.onnx`) or
+`TOKENIZER_PATH/tokenizer.json` is missing, preventing partial/misconfigured
+deployments. The display/model identifier is `BAAI/bge-small-en-v1.5`; the
+artifact directory mounted by this repository is `bge-small-en-v1.5`.
 
 ### Model Upgrade/Rollback Workflow
 
@@ -241,6 +251,15 @@ Podman Compose note:
 current compose file. For network-aware migration, use
 `scripts/postgres_to_qdrant_migration.sh` or a plain `podman run` invocation.
 
+The migration script selects its connection defaults from
+`MIGRATION_PODMAN_NETWORK`. With `MIGRATION_PODMAN_NETWORK=host`, it uses
+`POSTGRES_HOST=host.containers.internal`, Qdrant at
+`http://127.0.0.1:6333`, and embeddings at `http://127.0.0.1:8000`. With the
+default Podman network (`db_prdnet`), the migration container joins that
+network, uses `POSTGRES_HOST=postgres`, and reaches host-published services
+through `host.containers.internal:6333` (and `:8000`/`:18000` for the other
+services). Override these values explicitly when your deployment differs.
+
 If your PostgreSQL endpoint is published on the host, the legacy host-based
 form is:
 
@@ -256,12 +275,13 @@ QDRANT_COLLECTION=arxiv_metadata_from_postgres_YYYYMMDD \
 bash scripts/postgres_to_qdrant_migration.sh
 ```
 
-Recommended migration invocation:
+Recommended migration invocation from the host (Qdrant is published on port
+6333):
 
 ```bash
 POSTGRES_SCHEMA=priority_queue \
 POSTGRES_TABLE=arxiv \
-QDRANT_URL=http://127.0.0.1:7633 \
+QDRANT_URL=http://127.0.0.1:6333 \
 QDRANT_COLLECTION=arxiv_metadata_from_postgres_YYYYMMDD \
 CHECKPOINT_FILE=.migration/postgres_to_qdrant_checkpoint.json \
 USE_CPP_EMBEDDINGS_SERVICE=true \
@@ -285,19 +305,23 @@ psql "postgresql://<user>:<pass>@<host>:<port>/<db>" \
 ```
 
 3. Run migration with checkpoint + keyset mode enabled (default in current migrator implementation).
-4. Re-check source count and compare with Qdrant point count:
+4. Re-check source count and compare with the exact Qdrant point count. Then
+   verify a sample of identifiers and compare the corresponding date and
+   `setSpec` counts:
 
 ```bash
-curl -sS http://127.0.0.1:7633/collections/<collection>/points/count \
+curl -sS http://127.0.0.1:6333/collections/<collection>/points/count \
   -H 'Content-Type: application/json' \
   --data '{"exact":true}'
 ```
 
-5. If parity passes, re-enable normal write workflows.
+5. Treat parity as exact total-count equality plus sampled identifier/date/set
+   checks; it is not a full record-by-record comparison. If parity passes,
+   re-enable normal write workflows.
 
 ## Backup and Restore (Qdrant Storage)
 
-Qdrant data is persisted in the project-local bind mount at `data/qdrant/`.
+Qdrant data is persisted in the project-local bind mount at `./data/qdrant`.
 
 Backup:
 
@@ -311,11 +335,19 @@ docker run --rm \
 Restore:
 
 ```bash
+docker-compose stop qdrant
 docker run --rm \
   -v "$PWD/data/qdrant":/target \
   -v "$PWD":/backup \
   alpine sh -c "cd /target && tar xzf /backup/qdrant-storage-backup.tgz"
+docker-compose up -d qdrant
+curl -fsS http://localhost:6333/healthz
+curl -fsS http://localhost:6333/collections
 ```
+
+Stop or otherwise quiesce every live Qdrant process before restoring the
+storage directory. After restoring, start Qdrant and verify its health and
+expected collections before resuming application writes.
 
 ## Operational Health Checks
 
@@ -483,7 +515,14 @@ arhida/
 ├── Dockerfile              # Docker build
 ├── docker-compose.yaml     # Container orchestration
 ├── docker-compose.build.yaml # Local build configuration overlay
-├── include/               # Header files
+├── embeddings_service/     # Embeddings service
+├── tests/                  # C++ tests
+├── scripts/                # Operational and smoke-check scripts
+├── config/                 # Runtime configuration
+├── docs/                   # Project documentation
+├── models/                 # Local model artifacts (not runtime data)
+├── .github/workflows/      # CI workflows
+├── include/                # Header files
 │   ├── config/
 │   ├── db/
 │   ├── harvester/
@@ -499,6 +538,9 @@ arhida/
 └── legacy_python/         # Python reference implementation
 ```
 
+Runtime data such as `data/qdrant/` and local logs are deployment state and
+are not part of the committed source tree.
+
 ## Persistence Model
 
 Qdrant points contain:
@@ -511,11 +553,12 @@ Qdrant points contain:
 
 ## Rate Limiting
 
-The harvester complies with arXiv.org's usage constraints:
-
-- Maximum 1 request every 3 seconds
-- Single connection at a time
-- Maximum 30,000 results per query
+The harvester defaults to a 3-second delay (`ARXIV_RATE_LIMIT_DELAY=3`). It
+waits before each request and between retries, and retries failed OAI-PMH
+requests up to `ARXIV_MAX_RETRIES` (default `3`), with the configured delay
+between attempts. Operators remain responsible for checking and complying
+with arXiv.org's current rate, query-size, and usage policy; the client does
+not guarantee a universal 30,000-result cap.
 
 ## License
 
