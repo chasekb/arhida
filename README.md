@@ -77,8 +77,8 @@ Additional accelerator/runtime variables for embeddings container:
 docker-compose pull
 docker-compose up -d
 
-# one-off run
-docker-compose run --rm app ./arhida-cpp --mode recent
+# one-off run (the image ENTRYPOINT supplies ./arhida-cpp)
+docker-compose run --rm app --mode recent
 ```
 
 ### Deployment mode examples
@@ -110,8 +110,9 @@ ACCELERATOR_FALLBACK_TO_CPU=true docker-compose up -d embeddings
 
 ## Model Artifacts and Volume Mounting
 
-The embeddings container expects model artifacts mounted read-only from the
-local `./models` directory.
+The embeddings service uses the model name `BAAI/bge-small-en-v1.5`, while its
+mounted artifact directory is `bge-small-en-v1.5`. It expects model artifacts
+mounted read-only from the local `./models` directory.
 
 Expected layout:
 
@@ -121,9 +122,6 @@ Expected layout:
     model.onnx
     tokenizer/
       tokenizer.json
-      tokenizer_config.json
-      special_tokens_map.json
-      vocab.txt (or equivalent vocab files)
 ```
 
 Compose wiring (already present in `docker-compose.yaml`):
@@ -137,8 +135,7 @@ Compose wiring (already present in `docker-compose.yaml`):
 
 1. Export/pin the embedding model to ONNX format (`model.onnx`) for the selected
    model revision.
-2. Collect tokenizer assets for the same model revision (must include
-   `tokenizer.json`).
+2. Collect the tokenizer asset for the same model revision (`tokenizer.json`).
 3. Place artifacts into the mounted layout under `/models`:
 
 ```text
@@ -147,9 +144,6 @@ Compose wiring (already present in `docker-compose.yaml`):
     model.onnx
     tokenizer/
       tokenizer.json
-      tokenizer_config.json
-      special_tokens_map.json
-      vocab.txt (or equivalent vocab files)
 ```
 
 4. Start the embeddings service with strict validation enabled
@@ -261,7 +255,7 @@ Recommended migration invocation:
 ```bash
 POSTGRES_SCHEMA=priority_queue \
 POSTGRES_TABLE=arxiv \
-QDRANT_URL=http://127.0.0.1:7633 \
+QDRANT_URL=http://127.0.0.1:6333 \
 QDRANT_COLLECTION=arxiv_metadata_from_postgres_YYYYMMDD \
 CHECKPOINT_FILE=.migration/postgres_to_qdrant_checkpoint.json \
 USE_CPP_EMBEDDINGS_SERVICE=true \
@@ -288,7 +282,7 @@ psql "postgresql://<user>:<pass>@<host>:<port>/<db>" \
 4. Re-check source count and compare with Qdrant point count:
 
 ```bash
-curl -sS http://127.0.0.1:7633/collections/<collection>/points/count \
+curl -sS http://127.0.0.1:6333/collections/<collection>/points/count \
   -H 'Content-Type: application/json' \
   --data '{"exact":true}'
 ```
@@ -311,11 +305,23 @@ docker run --rm \
 Restore:
 
 ```bash
+# Stop writers and Qdrant before replacing persisted files.
+docker-compose stop app qdrant
+
 docker run --rm \
   -v "$PWD/data/qdrant":/target \
   -v "$PWD":/backup \
   alpine sh -c "cd /target && tar xzf /backup/qdrant-storage-backup.tgz"
+
+# Restart Qdrant and verify both its health and the configured collection.
+docker-compose up -d qdrant
+curl -fsS http://localhost:6333/healthz
+curl -fsS "http://localhost:6333/collections/${QDRANT_COLLECTION:-arxiv_metadata}" | jq
 ```
+
+Do not restore over a running Qdrant instance. If the service cannot be stopped,
+quiesce all Qdrant writers and follow the same post-restore restart and
+verification steps.
 
 ## Operational Health Checks
 
@@ -332,6 +338,13 @@ curl -fsS http://localhost:6333/healthz
 curl -fsS http://localhost:8000/health
 docker-compose ps
 ```
+
+Latest runtime evidence: a captured `podman-compose run --rm app --mode
+backfill ...` startup passed embeddings and Qdrant health checks, validated the
+configured `arxiv_metadata` collection at vector size 384, and began backfill.
+The same capture contained repeated `No <ListRecords> element found in
+OAI-PMH response` warnings. The warning cause and eventual ingestion outcome
+were not established by that run.
 
 Embeddings health payload now includes accelerator/runtime metadata for
 operational validation, including:
@@ -483,19 +496,30 @@ arhida/
 ├── Dockerfile              # Docker build
 ├── docker-compose.yaml     # Container orchestration
 ├── docker-compose.build.yaml # Local build configuration overlay
-├── include/               # Header files
+├── config/                # Runtime configuration
+├── embeddings_service/    # Embeddings service and image
+├── include/               # C++ header files
 │   ├── config/
 │   ├── db/
+│   ├── embedding/
 │   ├── harvester/
+│   ├── migration/
 │   ├── oai/
 │   └── utils/
-├── src/                   # Source files
+├── src/                   # C++ application and migration sources
 │   ├── main.cpp
 │   ├── config/
 │   ├── db/
+│   ├── embedding/
 │   ├── harvester/
+│   ├── migration/
 │   ├── oai/
 │   └── utils/
+├── tests/                 # C++ tests
+├── scripts/               # Smoke checks, benchmarks, and migration tools
+├── docs/                  # Design and migration documentation
+├── models/                # Tracked embedding model artifacts
+├── .github/workflows/     # CI/CD workflow definitions
 └── legacy_python/         # Python reference implementation
 ```
 
@@ -513,9 +537,14 @@ Qdrant points contain:
 
 The harvester complies with arXiv.org's usage constraints:
 
-- Maximum 1 request every 3 seconds
+- Default request delay of 3 seconds (configurable through `ARXIV_RATE_LIMIT_DELAY`)
 - Single connection at a time
-- Maximum 30,000 results per query
+- Configurable retry behavior (`ARXIV_MAX_RETRIES` and `ARXIV_RETRY_AFTER`)
+- Batch size is configurable through `ARXIV_BATCH_SIZE`; the current C++ path
+  does not impose a separate fixed result-count cap
+
+Operators remain responsible for following the current arXiv OAI-PMH usage
+policy when selecting query ranges, batch sizes, delays, and retry settings.
 
 ## License
 
