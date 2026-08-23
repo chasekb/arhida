@@ -144,7 +144,7 @@ curl -fsS "http://localhost:${MOCK_HOST_PORT}/health" >/dev/null
 set +e
 APP_OUTPUT="$(${COMPOSE_CMD} run --rm --no-deps \
   -e EMBEDDING_SERVICE_URL=${MOCK_SERVICE_URL} \
-  ${APP_SERVICE} ./arhida-cpp --mode recent 2>&1)"
+  ${APP_SERVICE} --mode recent 2>&1)"
 APP_EXIT=$?
 set -e
 

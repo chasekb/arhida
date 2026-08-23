@@ -78,7 +78,7 @@ docker-compose pull
 docker-compose up -d
 
 # one-off run
-docker-compose run --rm app ./arhida-cpp --mode recent
+docker-compose run --rm app --mode recent
 ```
 
 ### Deployment mode examples

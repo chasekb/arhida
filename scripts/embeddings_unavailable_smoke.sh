@@ -23,7 +23,7 @@ done
 curl -fsS "${QDRANT_URL}" >/dev/null
 
 set +e
-APP_OUTPUT="$(${COMPOSE_CMD} run --rm --no-deps ${APP_SERVICE} ./arhida-cpp --mode recent 2>&1)"
+APP_OUTPUT="$(${COMPOSE_CMD} run --rm --no-deps ${APP_SERVICE} --mode recent 2>&1)"
 APP_EXIT=$?
 set -e
 

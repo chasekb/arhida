@@ -16,7 +16,7 @@ ${COMPOSE_CMD} stop "${QDRANT_SERVICE}" "${EMBEDDINGS_SERVICE}" >/dev/null 2>&1 
 
 echo "[app-readiness-smoke] asserting app fails when started without dependencies"
 set +e
-FAIL_OUTPUT="$(${COMPOSE_CMD} run --rm --no-deps ${APP_SERVICE} ./arhida-cpp --mode recent 2>&1)"
+FAIL_OUTPUT="$(${COMPOSE_CMD} run --rm --no-deps ${APP_SERVICE} --mode recent 2>&1)"
 FAIL_EXIT=$?
 set -e
 
@@ -54,6 +54,6 @@ done
 curl -fsS "${EMBEDDINGS_HEALTH_URL}" >/dev/null
 
 echo "[app-readiness-smoke] asserting app starts once dependencies are ready"
-${COMPOSE_CMD} run --rm ${APP_SERVICE} ./arhida-cpp --help >/dev/null
+${COMPOSE_CMD} run --rm ${APP_SERVICE} --help >/dev/null
 
 echo "[app-readiness-smoke] app dependency readiness smoke checks passed"
