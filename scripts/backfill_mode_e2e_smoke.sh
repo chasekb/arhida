@@ -50,7 +50,7 @@ ${COMPOSE_CMD} run --rm \
   -e ARXIV_MAX_RETRIES=1 \
   -e ARXIV_RETRY_AFTER=1 \
   -e ARXIV_RATE_LIMIT_DELAY=1 \
-  ${APP_SERVICE} ./arhida-cpp --mode backfill \
+  ${APP_SERVICE} --mode backfill \
     --start-date "${BACKFILL_START_DATE}" \
     --end-date "${BACKFILL_END_DATE}" \
     --set-specs "${SET_SPECS}"

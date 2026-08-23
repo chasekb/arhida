@@ -39,7 +39,7 @@ ${COMPOSE_CMD} run --rm \
   -e ARXIV_MAX_RETRIES=1 \
   -e ARXIV_RETRY_AFTER=1 \
   -e ARXIV_RATE_LIMIT_DELAY=1 \
-  ${APP_SERVICE} ./arhida-cpp --mode recent --set-specs "${SET_SPECS}"
+  ${APP_SERVICE} --mode recent --set-specs "${SET_SPECS}"
 
 COUNT_RESPONSE="$(curl -fsS -X POST "${QDRANT_URL}/collections/${QDRANT_COLLECTION}/points/count" \
   -H "Content-Type: application/json" \

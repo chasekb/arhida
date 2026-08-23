@@ -35,11 +35,11 @@ done
 curl -fsS "${EMBEDDINGS_URL}" >/dev/null
 
 echo "[app-smoke] running recent mode"
-${COMPOSE_CMD} run --rm ${APP_SERVICE} ./arhida-cpp --mode recent
+${COMPOSE_CMD} run --rm ${APP_SERVICE} --mode recent
 
 echo "[app-smoke] running backfill mode start=${BACKFILL_START_DATE} end=${BACKFILL_END_DATE} set_specs=${SET_SPECS}"
 ${COMPOSE_CMD} run --rm ${APP_SERVICE} \
-  ./arhida-cpp --mode backfill \
+  --mode backfill \
   --start-date "${BACKFILL_START_DATE}" \
   --end-date "${BACKFILL_END_DATE}" \
   --set-specs "${SET_SPECS}"
