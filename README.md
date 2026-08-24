@@ -77,8 +77,8 @@ Additional accelerator/runtime variables for embeddings container:
 docker-compose pull
 docker-compose up -d
 
-# one-off run
-docker-compose run --rm app ./arhida-cpp --mode recent
+# one-off run (the image ENTRYPOINT is ./arhida-cpp)
+docker-compose run --rm app --mode recent
 ```
 
 ### Deployment mode examples
@@ -111,7 +111,8 @@ ACCELERATOR_FALLBACK_TO_CPU=true docker-compose up -d embeddings
 ## Model Artifacts and Volume Mounting
 
 The embeddings container expects model artifacts mounted read-only from the
-local `./models` directory.
+local `./models` directory. `BAAI/bge-small-en-v1.5` is the model identifier;
+the corresponding local artifact directory is `./models/bge-small-en-v1.5/`.
 
 Expected layout:
 
@@ -121,9 +122,6 @@ Expected layout:
     model.onnx
     tokenizer/
       tokenizer.json
-      tokenizer_config.json
-      special_tokens_map.json
-      vocab.txt (or equivalent vocab files)
 ```
 
 Compose wiring (already present in `docker-compose.yaml`):
@@ -147,9 +145,6 @@ Compose wiring (already present in `docker-compose.yaml`):
     model.onnx
     tokenizer/
       tokenizer.json
-      tokenizer_config.json
-      special_tokens_map.json
-      vocab.txt (or equivalent vocab files)
 ```
 
 4. Start the embeddings service with strict validation enabled
@@ -212,6 +207,12 @@ Current migration posture:
 4. Execute historical PostgreSQL migration utility when legacy data migration is needed.
 5. Verify data parity/coverage before final PostgreSQL decommission steps.
 
+The latest captured runtime check used `podman-compose run --rm app --mode
+backfill ...`. It passed embeddings and Qdrant health checks, validated the
+`arxiv_metadata` collection at vector size `384`, and began backfill. The same
+capture contained repeated `No <ListRecords> element found in OAI-PMH response`
+warnings; it does not establish the upstream cause or successful ingestion.
+
 ### High-Impact Migration Mode (Keyset + C++ Embeddings)
 
 `scripts/postgres_to_qdrant_migration.sh` now supports migration-optimized behavior:
@@ -261,7 +262,7 @@ Recommended migration invocation:
 ```bash
 POSTGRES_SCHEMA=priority_queue \
 POSTGRES_TABLE=arxiv \
-QDRANT_URL=http://127.0.0.1:7633 \
+QDRANT_URL=http://127.0.0.1:6333 \
 QDRANT_COLLECTION=arxiv_metadata_from_postgres_YYYYMMDD \
 CHECKPOINT_FILE=.migration/postgres_to_qdrant_checkpoint.json \
 USE_CPP_EMBEDDINGS_SERVICE=true \
@@ -288,7 +289,7 @@ psql "postgresql://<user>:<pass>@<host>:<port>/<db>" \
 4. Re-check source count and compare with Qdrant point count:
 
 ```bash
-curl -sS http://127.0.0.1:7633/collections/<collection>/points/count \
+curl -sS http://127.0.0.1:6333/collections/<collection>/points/count \
   -H 'Content-Type: application/json' \
   --data '{"exact":true}'
 ```
@@ -311,10 +312,23 @@ docker run --rm \
 Restore:
 
 ```bash
+# Stop or quiesce Qdrant before replacing files in its storage directory.
+docker-compose stop qdrant
+
 docker run --rm \
   -v "$PWD/data/qdrant":/target \
   -v "$PWD":/backup \
   alpine sh -c "cd /target && tar xzf /backup/qdrant-storage-backup.tgz"
+
+docker-compose up -d qdrant
+```
+
+After restoring, verify Qdrant health and the configured collection before
+starting application writers again:
+
+```bash
+curl -fsS http://localhost:6333/healthz
+curl -fsS "http://localhost:6333/collections/${QDRANT_COLLECTION:-arxiv_metadata}"
 ```
 
 ## Operational Health Checks
@@ -483,6 +497,11 @@ arhida/
 ├── Dockerfile              # Docker build
 ├── docker-compose.yaml     # Container orchestration
 ├── docker-compose.build.yaml # Local build configuration overlay
+├── .github/workflows/      # CI workflows
+├── config/                 # Runtime configuration
+├── docs/                   # Design and migration documentation
+├── models/                 # Enforced embedding artifacts
+├── embeddings_service/     # Embeddings HTTP service
 ├── include/               # Header files
 │   ├── config/
 │   ├── db/
@@ -496,7 +515,9 @@ arhida/
 │   ├── harvester/
 │   ├── oai/
 │   └── utils/
-└── legacy_python/         # Python reference implementation
+├── scripts/                # Smoke checks and operational scripts
+├── tests/                  # C++ tests
+└── legacy_python/          # Python reference implementation
 ```
 
 ## Persistence Model
@@ -511,11 +532,16 @@ Qdrant points contain:
 
 ## Rate Limiting
 
-The harvester complies with arXiv.org's usage constraints:
+The harvester's request pacing and retry behavior are configurable:
 
-- Maximum 1 request every 3 seconds
-- Single connection at a time
-- Maximum 30,000 results per query
+- `ARXIV_RATE_LIMIT_DELAY` controls the delay between requests (default: 3 seconds)
+- `ARXIV_MAX_RETRIES` controls retry attempts (default: 3)
+- `ARXIV_RETRY_AFTER` controls the retry delay (default: 5 seconds)
+- `ARXIV_BATCH_SIZE` controls records processed per batch (default: 2000)
+
+Operators remain responsible for following the current arXiv usage policy. The
+harvester does not impose an independently documented maximum result count per
+query.
 
 ## License
 
