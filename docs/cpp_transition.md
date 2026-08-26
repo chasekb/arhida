@@ -1,15 +1,11 @@
-# C++ Transition Note (Archived)
+# C++ Transition Note (Archived, Non-operational)
 
-This document previously described the PostgreSQL-first C++ transition path.
-
-That architecture is obsolete for normal runtime operation.
-
-## Active Source of Truth
-
-- `docs/vector_db_migration_plan.md`
+This note is retained for historical context only. It is not an operational
+runbook or source of truth; use the root README and `docker-compose.yaml` for
+the supported deployment.
 
 ## Current Runtime Direction
 
 - Normal runtime persistence: **Qdrant**
 - Embedding generation: **local embeddings service**
-- PostgreSQL role: **migration utility only**
+- Application services: **app**, **qdrant**, and **embeddings**

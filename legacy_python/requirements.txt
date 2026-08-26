@@ -1,5 +1,0 @@
-icecream
-psycopg2-binary
-python-dotenv
-requests
-sickle

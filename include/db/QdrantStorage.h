@@ -20,12 +20,6 @@ public:
     void connect() override;
     void disconnect() override;
     bool isConnected() const override;
-    void initialize() override;
-
-    void createSchema(const std::string& schema_name) override;
-    void createTable(const std::string& schema_name, const std::string& table_name) override;
-    void createIndexes(const std::string& schema_name, const std::string& table_name) override;
-    void validateStorageConfiguration() const override;
     void upsertRecord(const Record& record, const std::vector<float>& embedding) override;
     void upsertRecordsBatch(const std::vector<Record>& records,
                             const std::vector<std::vector<float>>& embeddings);

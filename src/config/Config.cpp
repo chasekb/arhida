@@ -49,15 +49,6 @@ void Config::load() {
     env_file.close();
   }
 
-  // PostgreSQL settings
-  host_ = getEnv("POSTGRES_HOST", "localhost");
-  database_ = getEnv("POSTGRES_DB", "");
-  user_ = getEnv("POSTGRES_USER", "");
-  password_ = getEnv("POSTGRES_PASSWORD", "");
-  port_ = std::stoi(getEnv("POSTGRES_PORT", "5432"));
-  schema_ = getEnv("POSTGRES_SCHEMA", "arxiv");
-  table_ = getEnv("POSTGRES_TABLE", "metadata");
-
   // Vector database settings
   vector_db_provider_ = getEnv("VECTOR_DB_PROVIDER", "qdrant");
   qdrant_url_ = getEnv("QDRANT_URL", "http://qdrant:6333");
@@ -95,10 +86,4 @@ void Config::load() {
   backfill_chunk_size_ = std::stoi(getEnv("BACKFILL_CHUNK_SIZE", "7"));
   backfill_start_date_ = getEnv("BACKFILL_START_DATE", "2007-01-01");
 
-  // Docker settings
-  docker_host_ = getEnv("DOCKER_POSTGRES_HOST", "db-local");
-  docker_user_file_ =
-      getEnv("DOCKER_POSTGRES_USER_FILE", "/run/secrets/postgres-u");
-  docker_password_file_ =
-      getEnv("DOCKER_POSTGRES_PASSWORD_FILE", "/run/secrets/postgres-p");
 }

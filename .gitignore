@@ -27,7 +27,6 @@ Makefile
 # Logs
 logs/
 *.log
-.migration/
 
 # Project-local container bind mounts / runtime state
 data/qdrant/
@@ -35,10 +34,6 @@ data/qdrant/
 # Environment
 .env
 .env.local
-
-# Database secrets (keep in repo if needed, but typically should be excluded)
-db/postgres-u.txt
-db/postgres-p.txt
 
 # OS
 .DS_Store

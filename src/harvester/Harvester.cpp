@@ -36,10 +36,6 @@ Harvester::~Harvester() {
   }
 }
 
-void Harvester::ensureStorageInitialized() {
-  db_.initialize();
-}
-
 int Harvester::harvestRecent(const std::vector<std::string> &set_specs) {
   Config &config = Config::instance();
 
@@ -68,9 +64,6 @@ int Harvester::harvestRecent(const std::vector<std::string> &set_specs) {
            std::localtime(&until_time));
 
   spdlog::info("Recent harvest from {} to {}", from_date, until_date);
-
-  // Ensure storage backend is initialized
-  ensureStorageInitialized();
 
   int total_records = 0;
   int successful_sets = 0;
@@ -141,9 +134,6 @@ int Harvester::harvestBackfill(const std::string &start_date,
   }
 
   spdlog::info("Backfill from {} to {}", start, end);
-
-  // Ensure storage backend is initialized
-  ensureStorageInitialized();
 
   int total_records = 0;
 

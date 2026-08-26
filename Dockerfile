@@ -5,11 +5,9 @@
 ARG BUILD_DATE
 ARG VERSION=main
 ARG REVISION=unknown
-ARG BUILD_MIGRATION_TOOL=ON
 
 # Stage 1: Builder
 FROM debian:bookworm-slim AS builder
-ARG BUILD_MIGRATION_TOOL=ON
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -17,7 +15,6 @@ RUN apt-get update && apt-get install -y \
     cmake \
     make \
     pkg-config \
-    libpq-dev \
     libcurl4-openssl-dev \
     libxml2-dev \
     git \
@@ -35,8 +32,7 @@ RUN mkdir -p build
 RUN cmake -B build -S . \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/local \
-    -DBUILD_TESTS=ON \
-    -DBUILD_MIGRATION_TOOL=${BUILD_MIGRATION_TOOL}
+    -DBUILD_TESTS=ON
 
 # Build
 RUN cmake --build build -j$(nproc)
@@ -51,7 +47,6 @@ ARG REVISION
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
-    libpq5 \
     libcurl4 \
     libxml2 \
     ca-certificates \
@@ -62,7 +57,6 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /usr/local/bin/arhida-cpp .
-COPY --from=builder /usr/local/bin/arhida-migrate .
 
 # Copy source files (headers, config) for potential runtime needs
 COPY --from=builder /build/include/ ./include/
@@ -73,8 +67,8 @@ COPY --from=builder /build/src/ ./src/
 # Copy .env.example as template (users should rename and configure)
 COPY .env.example .env
 
-# Create directory for database credentials
-RUN mkdir -p /db /app/logs && chown -R appuser:appuser /app
+# Create the application log directory
+RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser

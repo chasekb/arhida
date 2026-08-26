@@ -15,15 +15,6 @@ public:
     
     void load();
     
-    // PostgreSQL configuration
-    std::string getPostgresHost() const { return host_; }
-    std::string getPostgresDatabase() const { return database_; }
-    std::string getPostgresUser() const { return user_; }
-    std::string getPostgresPassword() const { return password_; }
-    int getPostgresPort() const { return port_; }
-    std::string getPostgresSchema() const { return schema_; }
-    std::string getPostgresTable() const { return table_; }
-
     // Vector database configuration
     std::string getVectorDbProvider() const { return vector_db_provider_; }
     std::string getQdrantUrl() const { return qdrant_url_; }
@@ -54,11 +45,6 @@ public:
     int getBackfillChunkSize() const { return backfill_chunk_size_; }
     std::string getBackfillStartDate() const { return backfill_start_date_; }
     
-    // Docker configuration
-    std::string getDockerPostgresHost() const { return docker_host_; }
-    std::string getDockerPostgresUserFile() const { return docker_user_file_; }
-    std::string getDockerPostgresPasswordFile() const { return docker_password_file_; }
-
 private:
     Config() = default;
     ~Config() = default;
@@ -67,15 +53,6 @@ private:
     
     std::string getEnv(const char* key, const char* default_value);
     
-    // PostgreSQL settings
-    std::string host_;
-    std::string database_;
-    std::string user_;
-    std::string password_;
-    int port_;
-    std::string schema_;
-    std::string table_;
-
     // Vector database settings
     std::string vector_db_provider_;
     std::string qdrant_url_;
@@ -106,8 +83,4 @@ private:
     int backfill_chunk_size_;
     std::string backfill_start_date_;
     
-    // Docker settings
-    std::string docker_host_;
-    std::string docker_user_file_;
-    std::string docker_password_file_;
 };

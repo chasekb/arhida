@@ -28,7 +28,6 @@ private:
     EmbeddingClient* embedding_client_;
     
     // Helper methods
-    void ensureStorageInitialized();
     int harvestSetSpec(const std::string& set_spec, const std::string& from_date, 
                        const std::string& until_date);
     void insertRecords(const std::vector<Record>& records, const std::string& set_spec);

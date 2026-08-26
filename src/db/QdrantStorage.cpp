@@ -75,33 +75,6 @@ void QdrantStorage::disconnect() { connected_ = false; }
 
 bool QdrantStorage::isConnected() const { return connected_; }
 
-void QdrantStorage::initialize() {
-  createTable(std::string(), collection_name_);
-  validateStorageConfiguration();
-}
-
-void QdrantStorage::createSchema(const std::string &schema_name) {
-  spdlog::debug("QdrantStorage::createSchema called with '{}' (no-op)", schema_name);
-}
-
-void QdrantStorage::createTable(const std::string &schema_name,
-                               const std::string &table_name) {
-  spdlog::info("Ensuring Qdrant collection is ready for {}.{}", schema_name,
-               table_name);
-  ensureCollection();
-  validateCollectionConfiguration();
-}
-
-void QdrantStorage::createIndexes(const std::string &schema_name,
-                                  const std::string &table_name) {
-  spdlog::debug("QdrantStorage::createIndexes called for {}.{} (no-op scaffold)",
-                schema_name, table_name);
-}
-
-void QdrantStorage::validateStorageConfiguration() const {
-  validateCollectionConfiguration();
-}
-
 void QdrantStorage::upsertRecord(const Record &record,
                                  const std::vector<float> &embedding) {
   Config &config = Config::instance();
