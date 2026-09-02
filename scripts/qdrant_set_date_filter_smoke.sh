@@ -10,6 +10,10 @@ VECTOR_SIZE="${VECTOR_SIZE:-384}"
 START_DATE="${START_DATE:-2026-01-01}"
 END_DATE="${END_DATE:-2026-01-05}"
 TARGET_SET_SPEC="${TARGET_SET_SPEC:-cs}"
+OCCUPIED_DATE_ONE="${OCCUPIED_DATE_ONE:-2026-01-01}"
+OCCUPIED_DATE_TWO="${OCCUPIED_DATE_TWO:-2026-01-03}"
+ABSENT_DATE="${ABSENT_DATE:-2026-01-04}"
+export START_DATE END_DATE OCCUPIED_DATE_ONE OCCUPIED_DATE_TWO ABSENT_DATE
 
 echo "[filter-smoke] waiting for Qdrant health endpoint at ${QDRANT_URL}/healthz"
 for _ in $(seq 1 30); do
@@ -41,25 +45,25 @@ payloads = [
     {
         "id": 201,
         "header_identifier": "oai:arXiv.org:filter-smoke-1",
-        "header_datestamp": "2026-01-01T00:00:00",
+        "header_datestamp": os.environ["OCCUPIED_DATE_ONE"],
         "header_setSpecs": ["cs"],
     },
     {
         "id": 202,
         "header_identifier": "oai:arXiv.org:filter-smoke-2",
-        "header_datestamp": "2026-01-03T00:00:00",
+        "header_datestamp": os.environ["OCCUPIED_DATE_TWO"],
         "header_setSpecs": ["cs", "math"],
     },
     {
         "id": 203,
         "header_identifier": "oai:arXiv.org:filter-smoke-3",
-        "header_datestamp": "2026-01-02T00:00:00",
+        "header_datestamp": "2026-01-02",
         "header_setSpecs": ["physics"],
     },
     {
         "id": 204,
         "header_identifier": "oai:arXiv.org:filter-smoke-4",
-        "header_datestamp": "2025-12-31T00:00:00",
+        "header_datestamp": "2025-12-31",
         "header_setSpecs": ["cs"],
     },
 ]
@@ -91,7 +95,7 @@ curl -fsS -X PUT "${QDRANT_URL}/collections/${COLLECTION}/points" \
 
 FILTER_RESPONSE="$(curl -fsS -X POST "${QDRANT_URL}/collections/${COLLECTION}/points/scroll" \
   -H "Content-Type: application/json" \
-  -d "{\"filter\":{\"must\":[{\"key\":\"header_setSpecs\",\"match\":{\"any\":[\"${TARGET_SET_SPEC}\"]}},{\"key\":\"header_datestamp\",\"range\":{\"gte\":\"${START_DATE}T00:00:00\",\"lte\":\"${END_DATE}T23:59:59\"}}]},\"with_payload\":[\"header_identifier\",\"header_datestamp\",\"header_setSpecs\"],\"with_vector\":false,\"limit\":128}")"
+  -d "{\"filter\":{\"must\":[{\"key\":\"header_setSpecs\",\"match\":{\"any\":[\"${TARGET_SET_SPEC}\"]}},{\"key\":\"header_datestamp\",\"range\":{\"gte\":\"${START_DATE}\",\"lte\":\"${END_DATE}\"}}]},\"with_payload\":[\"header_identifier\",\"header_datestamp\",\"header_setSpecs\"],\"with_vector\":false,\"limit\":128}")"
 export FILTER_RESPONSE
 
 python3 - <<'PY'
@@ -108,7 +112,10 @@ if len(points) != 2:
     )
 
 dates = sorted({p["payload"]["header_datestamp"][:10] for p in points})
-expected_dates = ["2026-01-01", "2026-01-03"]
+expected_dates = [
+    os.environ["OCCUPIED_DATE_ONE"],
+    os.environ["OCCUPIED_DATE_TWO"],
+]
 if dates != expected_dates:
     raise SystemExit(
         f"filter verification failed: expected matched dates {expected_dates}, got {dates}"
@@ -128,10 +135,24 @@ while cursor <= end_date:
         missing.append(key)
     cursor += datetime.timedelta(days=1)
 
-expected_missing = ["2026-01-02", "2026-01-04", "2026-01-05"]
+expected_missing = []
+cursor = start_date
+while cursor <= end_date:
+    if cursor.isoformat() not in expected_dates:
+        expected_missing.append(cursor.isoformat())
+    cursor += datetime.timedelta(days=1)
 if missing != expected_missing:
     raise SystemExit(
         f"missing-date verification failed: expected {expected_missing}, got {missing}"
+    )
+
+if os.environ["ABSENT_DATE"] not in missing:
+    raise SystemExit(
+        f"absent-date control failed: {os.environ['ABSENT_DATE']} was not reported missing"
+    )
+if any(date in missing for date in expected_dates):
+    raise SystemExit(
+        f"occupied-date control failed: an occupied date was reported missing: {missing}"
     )
 
 print(f"[filter-smoke] matched dates for set/date filter: {dates}")

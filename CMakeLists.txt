@@ -6,8 +6,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find packages
 find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
 pkg_check_modules(LIBCURL REQUIRED libcurl)
 pkg_check_modules(LIBXML2 REQUIRED libxml-2.0)
+
+# CMake 4 rejects older third-party minimum versions unless this compatibility
+# floor is explicitly provided before FetchContent configures dependencies.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 # Fetch header-only libraries
 include(FetchContent)
@@ -25,6 +30,13 @@ FetchContent_Declare(
     GIT_TAG v1.12.0
 )
 FetchContent_MakeAvailable(spdlog)
+
+# AppleClang 21 rejects fmt's consteval format-string checks in spdlog 1.12.
+# Keep the project buildable on current macOS toolchains without changing the
+# runtime logging API.
+if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    target_compile_definitions(spdlog PUBLIC FMT_CONSTEVAL=)
+endif()
 
 FetchContent_Declare(
     cli11
@@ -100,3 +112,14 @@ add_test(
     NAME embedding_client_test
     COMMAND embedding_client_test
 )
+
+add_executable(qdrant_missing_dates_test
+    tests/QdrantMissingDatesTest.cpp
+    src/db/QdrantStorage.cpp
+    src/config/Config.cpp
+)
+target_include_directories(qdrant_missing_dates_test PRIVATE include)
+target_link_libraries(qdrant_missing_dates_test ${LIBCURL_LIBRARIES}
+                      nlohmann_json::nlohmann_json spdlog::spdlog
+                      Threads::Threads)
+add_test(NAME qdrant_missing_dates_test COMMAND qdrant_missing_dates_test)

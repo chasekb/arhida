@@ -464,8 +464,8 @@ QdrantStorage::getMissingDates(const std::string &start_date,
                      {"match", {{"any", json::array({set_spec})}}}},
                     {{"key", "header_datestamp"},
                      {"range",
-                      {{"gte", start_date + "T00:00:00"},
-                       {"lte", end_date + "T23:59:59"}}}}})}};
+                      {{"gte", start_date},
+                       {"lte", end_date}}}}})}};
 
   json request_body = {
       {"filter", filter},
